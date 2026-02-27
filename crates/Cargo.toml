@@ -41,3 +41,4 @@ base64 = "0.22"
 axum = { version = "0.8", features = ["macros"] }
 tower-http = { version = "0.6", features = ["cors"] }
 anyhow = "1.0"
+regex = "1.12"
