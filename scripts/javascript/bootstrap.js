@@ -1,5 +1,6 @@
-const vm = require('vm');
 const { CrustSDK } = require('./sdk.js');
+const fs = require('fs');
+const vm = require('vm');
 
 async function bootstrap() {
     const sdk = new CrustSDK();
@@ -7,13 +8,20 @@ async function bootstrap() {
     const userCode = Buffer.from(process.env.USER_CODE, 'base64').toString('utf-8');
 
     const context = {
+        // Essential globals
+        global,
+        process,
         console,
         Buffer,
-        process,
+        setTimeout,
+        setInterval,
+        setImmediate,
+        clearTimeout,
+
+        // Modules and Exports
+        require: require, // Give them the REAL require
         exports: {},
-        require: (moduleName) => {
-            return require(moduleName);
-        }
+        module: { exports: {} },
     };
 
     vm.createContext(context);
@@ -23,11 +31,21 @@ async function bootstrap() {
 
         if (typeof context.exports.handler === 'function') {
             const result = await context.exports.handler(sdk, event);
-            console.log(JSON.stringify(result));
+            await safeOutput(result);
         }
     } catch (err) {
-        console.log(JSON.stringify({ error: err.message, kind: err.constructor.name }));
+        await safeOutput({ error: err.message });
         process.exit(1);
+    }
+}
+
+async function safeOutput(result) {
+    const outputPath = '/output/result.json';
+    try {
+        fs.writeFileSync(outputPath, JSON.stringify(result));
+        console.log('Output written successfully at ', outputPath);
+    } catch (err) {
+        console.error('Failed to write output:', err);
     }
 }
 

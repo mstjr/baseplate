@@ -46,9 +46,14 @@ async fn run_worker(count: u16) -> Result<(), Box<dyn std::error::Error>> {
     let trigger = Trigger {
         id: Uuid::now_v7(),
         action_type: ActionType::Script(Script {
-            code: "const axios = require('axios');\nconst handler = async (sdk, event) => {\n    const response = await axios.get('https://api.example.com/data');\n    console.log('Response:', response.data);\n};".to_string(),
-            language: ScriptLanguages::JavaScript,
-            parameters: std::collections::HashMap::new(),
+            code: include_str!("../example.py").to_string(),
+            language: ScriptLanguages::Python,
+            parameters: vec![(
+                "example_param".to_string(),
+                InputValue::Constant(serde_json::json!("example_value")),
+            )]
+            .into_iter()
+            .collect(),
         }),
     };
 
@@ -133,15 +138,22 @@ async fn execute_event(data: Event, db: &dyn TriggerDatabase) {
             }
             ActionType::Script(script) => {
                 tracing::info!("Executing script action for trigger {}", trigger.id);
-                match script.execute().await {
-                    Ok(_) => {
-                        tracing::info!("Script executed successfully for trigger {}.", trigger.id);
-                        //TODO: Process logs/store them if needed
+                let output = match script.execute().await {
+                    Ok(output) => {
+                        tracing::info!("Script executed successfully for trigger {}", trigger.id);
+                        output
                     }
                     Err(e) => {
                         tracing::error!("Error executing script for trigger {}: {}", trigger.id, e);
+                        continue;
                     }
-                }
+                };
+
+                tracing::info!(
+                    "Script output for trigger {}: {:?}",
+                    trigger.id,
+                    output.output
+                );
             }
         }
     }

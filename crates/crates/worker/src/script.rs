@@ -4,17 +4,24 @@ use crate::InputValue;
 use base64::Engine;
 use base64::engine::general_purpose;
 use bollard::container::LogOutput;
-use bollard::query_parameters::LogsOptions;
+use bollard::query_parameters::{
+    DownloadFromContainerOptions, LogsOptions, RemoveContainerOptionsBuilder,
+    RemoveVolumeOptionsBuilder,
+};
+use bollard::secret::{Mount, MountTypeEnum};
 use bollard::{models::HostConfig, secret::ContainerCreateBody};
 use chrono::{DateTime, Utc};
 use futures::StreamExt;
+use serde_json::Value;
 use std::collections::HashMap;
+use std::io::{Cursor, Read};
 use std::time::Duration;
+use tokio::io::AsyncReadExt;
 use tokio::time::timeout;
 
 lazy_static::lazy_static! {
     static ref HOST_CONFIG: HostConfig = HostConfig {
-    auto_remove: Some(true),
+    auto_remove: Some(false),
     readonly_rootfs: Some(true),
     cap_drop: Some(vec!["ALL".to_string()]),
     security_opt: Some(vec!["no-new-privileges".to_string()]),
@@ -39,6 +46,11 @@ pub struct Script {
     pub parameters: HashMap<String, InputValue>,
 }
 
+pub struct ScriptOutput {
+    pub logs: Vec<(DateTime<Utc>, Log)>,
+    pub output: Value,
+}
+
 /// Represents the supported scripting languages for registered scripts.
 #[derive(Clone, Debug, PartialEq)]
 pub enum ScriptLanguages {
@@ -46,150 +58,205 @@ pub enum ScriptLanguages {
     JavaScript,
 }
 
+async fn create_container(
+    docker: &bollard::Docker,
+    image: &str,
+    code: &str,
+    event: &Value,
+    volume_name: &str,
+) -> Result<String, Box<dyn std::error::Error>> {
+    let base64_code = general_purpose::STANDARD.encode(code.as_bytes());
+    let base64_event = general_purpose::STANDARD.encode(serde_json::to_string(event)?.as_bytes());
+
+    let mount = Mount {
+        target: Some("/output".to_string()),
+        typ: Some(MountTypeEnum::VOLUME),
+        read_only: Some(false),
+        ..Default::default()
+    };
+
+    let host_config = HostConfig {
+        mounts: Some(vec![mount]),
+        ..HOST_CONFIG.clone()
+    };
+
+    let container_id = docker
+        .create_container(
+            None,
+            ContainerCreateBody {
+                image: Some(image.to_string()),
+                host_config: Some(host_config),
+                env: Some(vec![
+                    format!("USER_CODE={}", base64_code),
+                    format!("USER_EVENT={}", base64_event),
+                ]),
+                volumes: Some(vec![format!("{}:/output", volume_name)]),
+                ..Default::default()
+            },
+        )
+        .await?
+        .id;
+    Ok(container_id)
+}
+
 impl Script {
-    pub async fn execute(self) -> Result<LogStream, Box<dyn std::error::Error>> {
+    pub async fn execute(self) -> Result<ScriptOutput, Box<dyn std::error::Error>> {
         let docker = bollard::Docker::connect_with_local_defaults()?;
         tracing::info!(
             "Creating container for script execution with language: {:?}",
             self.language
         );
 
-        let base64_code = general_purpose::STANDARD.encode(self.code.as_bytes());
-        let params_map: HashMap<String, serde_json::Value> = self
-            .parameters
-            .iter()
-            .map(|(k, v)| (k.clone(), v.to_json_value()))
-            .collect();
-        let base64_params =
-            general_purpose::STANDARD.encode(serde_json::to_string(&params_map)?.as_bytes());
+        let volume_name = uuid::Uuid::now_v7().to_string();
 
         let container_id = match self.language {
             ScriptLanguages::Python => {
-                docker
-                    .create_container(
-                        None,
-                        ContainerCreateBody {
-                            image: Some("python-runner:3.14".to_string()),
-                            host_config: Some(HOST_CONFIG.clone()),
-                            env: Some(vec![
-                                format!("USER_CODE={}", base64_code),
-                                format!("USER_EVENT={}", base64_params),
-                            ]),
-                            ..Default::default()
-                        },
-                    )
-                    .await?
-                    .id
+                create_container(
+                    &docker,
+                    "python-runner:3.14",
+                    &self.code,
+                    &serde_json::to_value(&self.parameters)?,
+                    &volume_name,
+                )
+                .await?
             }
             ScriptLanguages::JavaScript => {
-                docker
-                    .create_container(
-                        None,
-                        ContainerCreateBody {
-                            image: Some("javascript-runner:24".to_string()),
-                            host_config: Some(HOST_CONFIG.clone()),
-                            env: Some(vec![
-                                format!("USER_CODE={}", base64_code),
-                                format!("USER_EVENT={}", base64_params),
-                            ]),
-                            ..Default::default()
-                        },
-                    )
-                    .await?
-                    .id
+                create_container(
+                    &docker,
+                    "javascript-runner:24",
+                    &self.code,
+                    &serde_json::to_value(&self.parameters)?,
+                    &volume_name,
+                )
+                .await?
             }
         };
 
         tracing::info!("Starting container with ID: {}", container_id);
-        // 1. Wrap the entire execution logic in a timeout
+        docker.start_container(&container_id, None).await?;
+
         let result = timeout(Duration::from_secs(30), async {
-            docker.start_container(&container_id, None).await?;
             tracing::info!("Container {} started successfully", container_id);
-            let mut log_stream = docker.logs(
-                &container_id,
-                Some(LogsOptions {
-                    stdout: true,
-                    stderr: true,
-                    follow: true,
-                    ..Default::default()
-                }),
-            );
-            tracing::info!("Collecting logs for container {}", container_id);
-
-            let mut output_buffer = LogStream::new();
-
-            while let Some(log_result) = log_stream.next().await {
-                let log_output = log_result?;
-                let log = Log::from(log_output);
-                output_buffer.push(log);
-            }
-            tracing::info!("Finished collecting logs for container {}", container_id);
-
-            //Printing logs
-            for (timestamp, log) in &output_buffer.logs {
-                match log {
-                    Log::StdOut(message) => {
-                        tracing::info!("{} - STDOUT: {}", timestamp, message);
-                    }
-                    Log::StdErr(message) => {
-                        tracing::error!("{} - STDERR: {}", timestamp, message);
-                    }
-                    Log::StdIn(message) => {
-                        tracing::info!("{} - STDIN: {}", timestamp, message);
-                    }
-                    Log::Console(message) => {
-                        tracing::info!("{} - CONSOLE: {}", timestamp, message);
-                    }
-                }
-            }
-
-            Ok::<LogStream, Box<dyn std::error::Error>>(output_buffer)
+            Self::collect_logs(&docker, &container_id).await
         })
         .await;
 
-        let stream = match result {
-            Ok(inner_result) => inner_result?,
-            Err(_) => {
-                let _ = docker.kill_container(&container_id, None).await;
-                return Err("Operation timed out after 30 seconds".into());
-            }
+        tracing::info!("Container {} execution completed", container_id);
+        let Ok(logs) = result else {
+            tracing::error!(
+                "Container {} did not finish within the timeout period",
+                container_id
+            );
+            Self::remove_container(&docker, &container_id).await?;
+            return Err("Script execution timed out".into());
         };
+        tracing::info!("Collected logs from container {}", container_id);
 
-        Ok(stream)
-    }
-}
+        let output = Self::get_output(&docker, &container_id).await;
 
-impl InputValue {
-    fn to_var(&self, var_name: &str, language: &ScriptLanguages) -> String {
-        let value = match self {
-            InputValue::Constant(val) => match language {
-                ScriptLanguages::Python => {
-                    if let serde_json::Value::String(s) = val {
-                        format!("\"{}\"", s)
-                    } else {
-                        val.to_string()
-                    }
-                }
-                ScriptLanguages::JavaScript => {
-                    if let serde_json::Value::String(s) = val {
-                        format!("\"{}\"", s)
-                    } else {
-                        val.to_string()
-                    }
-                }
-            },
-            InputValue::InstanceValue(_) => unimplemented!(
-                "InstanceValue processing is not implemented yet. It requires looking up the field_id in the current instance data to extract the value."
-            ),
-            InputValue::InstanceReference { .. } => unimplemented!(
-                "InstanceReference processing is not implemented yet. It requires looking up the referenced instance using definition_id and field_id, then extracting the value from reference_field_id."
-            ),
-        };
-
-        match language {
-            ScriptLanguages::Python => format!("{} = {}", var_name, value),
-            ScriptLanguages::JavaScript => format!("const {} = {};", var_name, value),
+        if let Err(e) = &output {
+            tracing::error!(
+                "Failed to retrieve output from container {}: {}",
+                container_id,
+                e
+            );
         }
+
+        let Ok(output) = output else {
+            tracing::error!("Failed to retrieve output from container {}", container_id);
+            Self::remove_container(&docker, &container_id).await?;
+            return Err("Failed to retrieve output".into());
+        };
+
+        let Ok(logs) = logs else {
+            tracing::error!("Failed to collect logs from container {}", container_id);
+            Self::remove_container(&docker, &container_id).await?;
+            return Err("Failed to collect logs".into());
+        };
+        tracing::info!(
+            "Successfully collected logs from container {}",
+            container_id
+        );
+
+        Self::remove_container(&docker, &container_id).await?;
+
+        Ok(ScriptOutput { logs, output })
+    }
+
+    async fn remove_container(
+        docker: &bollard::Docker,
+        container_id: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        docker
+            .remove_container(
+                container_id,
+                Some(
+                    RemoveContainerOptionsBuilder::default()
+                        .force(true)
+                        .v(true)
+                        .build(),
+                ),
+            )
+            .await?;
+
+        Ok(())
+    }
+
+    async fn collect_logs(
+        docker: &bollard::Docker,
+        container_id: &str,
+    ) -> Result<Vec<(DateTime<Utc>, Log)>, Box<dyn std::error::Error>> {
+        let mut log_stream = docker.logs(
+            container_id,
+            Some(LogsOptions {
+                stdout: true,
+                stderr: true,
+                follow: true,
+                ..Default::default()
+            }),
+        );
+
+        let mut logs = Vec::new();
+        while let Some(log_result) = log_stream.next().await {
+            let log_output = log_result?;
+            let log = Log::from(log_output);
+            logs.push((Utc::now(), log));
+        }
+        Ok(logs)
+    }
+
+    async fn get_output(
+        docker: &bollard::Docker,
+        container_id: &str,
+    ) -> Result<Value, Box<dyn std::error::Error>> {
+        let mut output = String::new();
+        let mut stream = docker.download_from_container(
+            container_id,
+            Some(DownloadFromContainerOptions {
+                path: "/output/result.json".to_string(),
+            }),
+        );
+
+        let mut tar_ball = Vec::new();
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk?;
+            tar_ball.extend_from_slice(&chunk);
+        }
+
+        let cursor = Cursor::new(tar_ball);
+        let mut archive = tar::Archive::new(cursor);
+
+        for entry in archive.entries()? {
+            let mut entry = entry?;
+            if entry.path()?.file_name() == Some(std::ffi::OsStr::new("result.json")) {
+                let mut content = String::new();
+                entry.read_to_string(&mut content)?;
+                output = content;
+                break;
+            }
+        }
+        let json_output: Value = serde_json::from_str(&output)?;
+        Ok(json_output)
     }
 }
 
@@ -199,21 +266,6 @@ pub enum Log {
     StdErr(String),
     StdIn(String),
     Console(String),
-}
-
-#[derive(Debug)]
-pub struct LogStream {
-    logs: Vec<(DateTime<Utc>, Log)>,
-}
-
-impl LogStream {
-    pub fn new() -> Self {
-        LogStream { logs: Vec::new() }
-    }
-
-    pub fn push(&mut self, log: Log) {
-        self.logs.push((Utc::now(), log));
-    }
 }
 
 impl From<LogOutput> for Log {

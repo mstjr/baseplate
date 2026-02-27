@@ -24,6 +24,9 @@ RUN pip install \
 
 COPY ./bootstrap.py /app/bootstrap.py
 
+RUN mkdir /output
+RUN chown runner:runner /output
+
 USER runner
 
 CMD ["python", "bootstrap.py"]

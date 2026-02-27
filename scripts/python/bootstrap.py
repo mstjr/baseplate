@@ -10,12 +10,18 @@ user_code = base64.b64decode(os.getenv('USER_CODE')).decode('utf-8')
 user_module = {}
 exec(user_code, user_module)
 
+def safe_output(result):
+    RW_OUTPUT_PATH = '/output/result.json';
+    with open(RW_OUTPUT_PATH, 'w') as f:
+        json.dump(result, f)
+
 if 'handler' in user_module:
     try:
         result = user_module['handler'](sdk, event)
-        print(json.dumps(result))
+        safe_output(result)
     except Exception as e:
-        print(json.dumps({"error": str(e), "kind": type(e).__name__}))
+        safe_output({"error": str(e), "kind": e.__class__.__name__})
+        exit(1)
 else:
-    print(json.dumps({"error": "No handler function found in user code.", "kind": "HandlerNotFoundError"}))
+    safe_output({"error": "No handler function found in user code."})
     exit(1)
