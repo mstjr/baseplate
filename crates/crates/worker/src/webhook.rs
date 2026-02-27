@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use crate::InputValue;
+use common_dto::InputValue;
 
 /// Represents a registered webhook and the blueprint for the outgoing request.
 #[derive(Clone, Debug)]

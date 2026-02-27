@@ -1,0 +1,12 @@
+[worker]
+count = 5
+mode = "http"
+role = "both"
+
+[worker.http]
+port = 8001
+host = "127.0.0.1"
+
+[worker.amqp]
+url = "amqp://localhost"
+queue_name = "test_queue"

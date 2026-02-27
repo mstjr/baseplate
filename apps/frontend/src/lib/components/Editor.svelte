@@ -8,10 +8,8 @@
 	import { catppuccinMocha } from '@catppuccin/codemirror';
 
 	// Props
-	export let theme: 'light' | 'dark' | 'catppuccin' = 'dark';
-	export let initialDoc: string =
-		'import math\nimport sys\n\ndef main():\n    print("Hello Svelte CodeMirror")\n    print(f"PI = {math.pi}")\n    print(sys.version)\n\nmain()';
-	export let onChange: ((code: string) => void) | undefined = undefined;
+
+	let { theme = 'dark', code = $bindable('') } = $props();
 
 	let editorContainer: HTMLDivElement;
 	let view: EditorView;
@@ -22,14 +20,16 @@
 		light: [],
 		dark: oneDark,
 		catppuccin: catppuccinMocha
-	};
+	} as Record<string, any>;
 
-	// Reactive statement to update theme when prop changes
-	$: if (view && theme) {
-		view.dispatch({
-			effects: themeCompartment.reconfigure(themes[theme])
-		});
-	}
+	// Effect to update theme when prop changes
+	$effect(() => {
+		if (view && theme) {
+			view.dispatch({
+				effects: themeCompartment.reconfigure(themes[theme])
+			});
+		}
+	});
 
 	onMount(() => {
 		// 1. Configuration de l'extension LSP
@@ -43,7 +43,7 @@
 
 		// 2. Initialisation de l'éditeur
 		view = new EditorView({
-			doc: initialDoc,
+			doc: code,
 			extensions: [
 				basicSetup,
 				python(),
@@ -51,7 +51,8 @@
 				ls, // On injecte l'extension LSP ici
 				EditorView.updateListener.of((update) => {
 					if (update.docChanged) {
-						if (onChange) onChange(update.state.doc.toString());
+						const newCode = update.state.doc.toString();
+						code = newCode; // Met à jour le code lié au composant
 					}
 				})
 			],

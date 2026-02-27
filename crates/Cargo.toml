@@ -38,3 +38,6 @@ bollard = { version = "0.20" }
 lazy_static = "1.5"
 toml = "0.9"
 base64 = "0.22"
+axum = { version = "0.8", features = ["macros"] }
+tower-http = { version = "0.6", features = ["cors"] }
+anyhow = "1.0"
