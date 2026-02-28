@@ -1,38 +1,77 @@
-# Why I make this project
-For many reasons actually, a lot of CRM arleady exists, but they are either paid software, or open source but not well maintained, or not open source at all or even it is open source but the it is missing some features that I really want to have in a CRM, so I decided to make my own CRM, and I want to make it open source and free for everyone to use and contribute to it.
+# OpenCRM
 
-# Who is this project for
-This projet is has the idea to be used by anyone who wants to use a CRM. So small businesses, freelancers, and even individuals who want to manage their contacts and tasks in a more efficient way.
+A modern, developer-friendly, and **truly customizable** open-source CRM built for speed and flexibility.
 
-# What is gonna make it valuable
-The main value of this project is that it is open source and free for everyone to use and contribute to it. It is also designed to be really customizable, so users can tailor it to their specific needs. You can create your own custom fields, custom views, custom automations and custom data models. It is also designed to be really easy to use, so even non-technical users can use it without any problems.
+## Why This Project?
 
-# The core ideas
-Everything in the CRM is a definition with instances. Even the default definitions like contacts, companies, deals, etc. are just definitions with instances. However, few definitions - like contacts, companies, deals, etc. - are marked as system definitions, which means they cannot be deleted, but they can be customized. The same with some fields for those same system definitions, some fields are marked as system fields, which means they cannot be deleted, but they can be customized.
+While the market is flooded with CRM solutions, most fall into two traps: they are either expensive proprietary silos or open-source projects that lack critical flexibility (like subforms or granular field requirements).
 
-# Default definitions and fields
-- Contacts : First name, last name, email, phone number
-- Companies : Name, industry, website, Contacts (linked to contacts definition)
-- Deals : Name, amount, stage, company (linked to companies definition), contact (linked to contacts definition)
-- Tasks : Name, due date, status, related to (linked to any definition)
+After experimenting with excellent tools like [Twenty](https://twenty.com), I realized there was still a gap for a CRM that treats **customization as a first-class citizen**. This project is my answer: a free, open-source alternative that gives you total control over your data structures without the bloat.
 
-# User stories
-- The user can create a custom data model, with custom fields and custom views.
-- The user can create custom automations based on triggers and actions.
-- The user can write custom code to extend the functionality of the CRM.
-- The user can manage data from definition : create, read, update and delete records.
-- The user can manage the definitions and fields : create, read, update and delete definitions and fields.
-- The user need to login to access the CRM, and can manage their account settings.
-- The user can invite other users to collaborate on the CRM, and manage their permissions.
-- The user can create dashboards and reports to visualize their data in a more efficient way.
-- The user can integrate the CRM with other tools and services they use, like email marketing tools, calendar, etc.
-- The user can create other organizations and manage their data and users in those organizations.
-- The user can manage multiple organizations from the same account, and switch between them easily.
+## Key Value Propositions
 
-# Tech stack
-- Backend : Rust with axum framework, and sqlx for database interactions.
-- Frontend : Svelte with sveltekit, and tailwindcss for styling.
-- Database : Postgresql
-- Cache : Redis
-- Message broker : RabbitMQ
-- Containerization : Docker
+* **Definition-Based Architecture:** Everything is a "Definition" with "Instances." This allows for infinite nesting and custom data modeling.
+* **High Performance:** Built with **Rust** for a lightning-fast, memory-safe backend.
+* **Total Customization:** Create custom fields, views, automations, and even write custom code to extend functionality.
+* **Multi-Tenant by Design:** Manage multiple organizations from a single account effortlessly.
+* **User-Centric:** Designed to be intuitive for non-technical users while remaining powerful for developers.
+
+---
+
+## Core Architecture & Data Model
+
+The system operates on a "System vs. Custom" logic. While you can build anything, we provide a robust foundation:
+
+### Default Definitions
+
+| Entity        | Key System Fields                                |
+| ------------- | ------------------------------------------------ |
+| **Contacts**  | First name, Last name, Email, Phone              |
+| **Companies** | Name, Industry, Website, Linked Contacts         |
+| **Deals**     | Name, Amount, Stage, Linked Company/Contact      |
+| **Tasks**     | Name, Due Date, Status, Polymorphic "Related To" |
+
+> **Note:** System definitions and fields cannot be deleted to ensure core stability, but they are fully customizable to fit your workflow.
+
+---
+
+## Tech Stack
+
+We've chosen a modern, high-performance stack to ensure the CRM can scale with your business:
+
+* **Backend:** [Rust](https://www.rust-lang.org/) (Axum framework + SQLx)
+* **Frontend:** [SvelteKit](https://kit.svelte.dev/) + [TailwindCSS](https://tailwindcss.com/)
+* **Database:** PostgreSQL
+* **Caching:** Redis
+* **Messaging:** RabbitMQ (for background jobs and automations)
+* **Infrastructure:** Docker
+
+---
+
+## Roadmap & User Stories
+
+Currently, the project is in **Early Alpha**. Our development is guided by these core capabilities:
+
+* [ ] **Data Modeling:** Create/Read/Update/Delete (CRUD) for custom definitions and fields.
+* [x] **Automation Engine:** Trigger-based actions and custom code execution.
+* [ ] **Collaboration:** Robust user permission system and organization switching.
+* [ ] **Insights:** Custom dashboards and reporting engines.
+* [ ] **Integrations:** API-first approach for syncing with Email, Calendars, and Marketing tools.
+
+---
+
+## Alternatives
+
+If you need a production-ready CRM today, I highly recommend checking out these projects:
+
+* **Twenty:** Modern, sleek, and community-driven.
+* **SuiteCRM:** The enterprise-grade open-source classic.
+* **EspoCRM:** Highly flexible and lean.
+
+---
+
+## Contributing
+
+This is an open-source project for everyone. Whether you want to fix a bug, suggest a feature, or help with documentation, your contributions are welcome!
+
+*Stay tuned for contribution guidelines as we move toward a stable release.*
