@@ -238,7 +238,6 @@ impl DefinitionDisplayView {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tracing::field;
     use uuid::Uuid;
 
     #[test]
@@ -295,5 +294,60 @@ mod tests {
             api_serialized, id_serialized,
             "Serialization should differ based on key type"
         )
+    }
+
+    #[test]
+    fn test_field_type_view_serialization() {
+        let field_type = FieldTypeView::Text {
+            max_length: Some(255),
+            pattern: Some(r"^[a-zA-Z0-9_]+$".to_string()),
+            pattern_example: Some("valid_input_123".to_string()),
+        };
+
+        let serialized = serde_json::to_string(&field_type).unwrap();
+        assert_eq!(
+            serialized,
+            r#"{"type":"text","config":{"max_length":255,"pattern":"^[a-zA-Z0-9_]+$","pattern_example":"valid_input_123"}}"#
+        );
+
+        let field_type = FieldTypeView::Select {
+            options: vec![
+                SelectDisplayView {
+                    option_id: Uuid::from_u128(0),
+                    display_value: "Option 1".to_string(),
+                    color: Some("#FF0000".to_string()),
+                },
+                SelectDisplayView {
+                    option_id: Uuid::from_u128(1),
+                    display_value: "Option 2".to_string(),
+                    color: None,
+                },
+            ],
+            max_items: Some(3),
+        };
+        let serialized = serde_json::to_string(&field_type).unwrap();
+        assert_eq!(
+            serialized,
+            r##"{"type":"select","config":{"options":[{"option_id":"00000000-0000-0000-0000-000000000000","display_value":"Option 1","color":"#FF0000"},{"option_id":"00000000-0000-0000-0000-000000000001","display_value":"Option 2","color":null}],"max_items":3}}"##
+        );
+
+        let field_type = FieldTypeView::References {
+            allowed_definitions: Some(vec![DefinitionDisplayView {
+                definition: KeyView {
+                    id: Uuid::from_u128(0),
+                    api_name: "def1".to_string(),
+                },
+                display_field: Some(KeyView {
+                    id: Uuid::from_u128(10),
+                    api_name: "field1".to_string(),
+                }),
+            }]),
+            max_items: None,
+        };
+        let serialized = serde_json::to_string(&field_type).unwrap();
+        assert_eq!(
+            serialized,
+            r##"{"type":"references","config":{"allowed_definitions":[{"definition":{"id":"00000000-0000-0000-0000-000000000000","api_name":"def1"},"display_field":{"id":"00000000-0000-0000-0000-00000000000a","api_name":"field1"}}],"max_items":null}}"##
+        );
     }
 }
