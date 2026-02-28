@@ -214,6 +214,10 @@ impl DefinitionContext {
             .and_then(|id| self.definitions.get(id).map(|def| (*id, def)))
     }
 
+    pub fn verify_api_name_uniqueness(&self, api_name: &str) -> bool {
+        !self.api_name_index.contains_key(api_name)
+    }
+
     pub fn get_field_definition_field_by_id(&self, field_id: &Uuid) -> Option<&DefinitionField> {
         self.field_id_index.get(field_id)
     }

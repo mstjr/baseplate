@@ -3,92 +3,67 @@ mod fields;
 
 pub use components::*;
 pub use fields::*;
-
-use std::collections::HashMap;
+use tracing::instrument;
 
 use crate::json::Patch;
 use common_core::{
     DefinitionContext,
-    definitions::{Definition, DefinitionField, FieldType, SelectDisplay},
+    definitions::{Definition, DefinitionDisplay, DefinitionField, FieldType},
     keys::Key,
 };
 use serde::Deserialize;
+use std::collections::HashMap;
 use uuid::Uuid;
 
+/// Represents the input model for creating or updating a definition, including its fields and display configuration.
+/// This model is designed to be flexible for both creation and update operations, with optional fields and patch semantics.
 #[derive(Deserialize, Clone, Debug, Default)]
 #[serde(default)]
 pub struct DefinitionModel {
     pub api_name: Option<String>,
     pub display_field: Option<String>,
-
     pub singular_name: Option<String>,
     pub plural_name: Option<String>,
-
     pub description: Patch<String>,
-
     pub title_field: Option<Key>,
     pub quick_view_fields: Option<Vec<Key>>,
-
     pub fields: Option<Vec<FieldDefinitionModel>>,
     pub remove_fields: Option<Vec<Key>>,
+    pub hidden: Option<bool>,
 }
 
 impl DefinitionModel {
+    #[instrument(skip(self, ctx), fields(api_name = ?self.api_name))]
     pub fn to_definition(self, ctx: &DefinitionContext) -> Result<Definition, String> {
         let mut fields = HashMap::new();
-        Self::process_fields(
+        process_fields(
             &mut fields,
             self.fields.unwrap_or_default(),
             Vec::new(),
             ctx,
         )?;
 
-        let api_name = self
-            .api_name
-            .ok_or_else(|| "API name must be provided when creating a definition".to_string())?;
+        let api_name = self.api_name.ok_or("API name must be provided")?;
+        if !ctx.verify_api_name_uniqueness(&api_name) {
+            return Err("API name must be unique across definitions".to_string());
+        }
 
-        let singular_name = self.singular_name.ok_or_else(|| {
-            "Singular name must be provided when creating a definition".to_string()
-        })?;
+        let singular_name = self.singular_name.ok_or("Singular name must be provided")?;
+        let plural_name = self.plural_name.ok_or("Plural name must be provided")?;
+        let title_field_key = self.title_field.ok_or("Title field must be provided")?;
+        let qv_keys = self
+            .quick_view_fields
+            .ok_or("Quick view fields must be provided")?;
 
-        let plural_name = self
-            .plural_name
-            .ok_or_else(|| "Plural name must be provided when creating a definition".to_string())?;
+        // Resolve Keys to UUIDs
+        let title_field = resolve_key(&fields, &title_field_key)
+            .map_err(|_| "Title field API name does not match any field".to_string())?;
 
-        let description = self.description.ok().cloned();
-
-        let title_field = self
-            .title_field
-            .ok_or_else(|| "Title field must be provided when creating a definition".to_string())?;
-
-        let quick_view_fields = self.quick_view_fields.ok_or_else(|| {
-            "Quick view fields must be provided when creating a definition".to_string()
-        })?;
-
-        let title_field = match title_field {
-            Key::Id(id) => id,
-            Key::ApiName(api_name) => {
-                let field_id = fields
-                    .iter()
-                    .find(|(_, field)| field.api_name == api_name)
-                    .map(|(id, _)| *id)
-                    .ok_or_else(|| "Title field API name does not match any field".to_string())?;
-
-                field_id
-            }
-        };
-
-        let quick_view_fields = quick_view_fields
+        let quick_view_fields = qv_keys
             .into_iter()
-            .map(|field_key| match field_key {
-                Key::Id(id) => Ok(id),
-                Key::ApiName(api_name) => fields
-                    .iter()
-                    .find(|(_, field)| field.api_name == api_name)
-                    .map(|(id, _)| *id)
-                    .ok_or_else(|| {
-                        "Quick view field API name does not match any field".to_string()
-                    }),
+            .map(|k| {
+                resolve_key(&fields, &k)
+                    .map_err(|_| "Quick view field API name does not match any field".to_string())
             })
             .collect::<Result<Vec<_>, _>>()?;
 
@@ -96,233 +71,334 @@ impl DefinitionModel {
             api_name,
             singular_name,
             plural_name,
-            description,
+            description: self.description.ok().cloned(),
             title_field,
             quick_view_fields,
             fields,
+            hidden: self.hidden.unwrap_or(false),
         })
     }
 
+    #[instrument(skip(self, ctx), fields(api_name = ?existing.api_name))]
     pub fn update_definition(
         self,
         existing: &mut Definition,
         ctx: &DefinitionContext,
     ) -> Result<(), String> {
-        Self::process_fields(
+        process_fields(
             &mut existing.fields,
             self.fields.unwrap_or_default(),
             self.remove_fields.unwrap_or_default(),
             ctx,
         )?;
 
-        if let Some(api_name) = self.api_name {
-            existing.api_name = api_name;
+        if let Some(api) = self.api_name {
+            if existing.api_name != api && !ctx.verify_api_name_uniqueness(&api) {
+                return Err("API name must be unique across definitions".to_string());
+            }
+            existing.api_name = api;
+        }
+        if let Some(s) = self.singular_name {
+            existing.singular_name = s;
+        }
+        if let Some(p) = self.plural_name {
+            existing.plural_name = p;
         }
 
-        if let Some(singular_name) = self.singular_name {
-            existing.singular_name = singular_name;
+        apply_patch(&mut existing.description, self.description);
+
+        if let Some(key) = self.title_field {
+            existing.title_field = resolve_key(&existing.fields, &key)
+                .map_err(|_| "Title field API name does not match any field".to_string())?;
         }
 
-        if let Some(plural_name) = self.plural_name {
-            existing.plural_name = plural_name;
-        }
-
-        if let Patch::Value(description) = self.description {
-            existing.description = Some(description);
-        } else if let Patch::Null = self.description {
-            existing.description = None;
-        }
-
-        if let Some(title_field_key) = self.title_field {
-            let title_field_id = match title_field_key {
-                Key::Id(id) => id,
-                Key::ApiName(api_name) => existing
-                    .fields
-                    .iter()
-                    .find(|(_, field)| field.api_name == api_name)
-                    .map(|(id, _)| *id)
-                    .ok_or_else(|| "Title field API name does not match any field".to_string())?,
-            };
-            existing.title_field = title_field_id;
-        }
-
-        if let Some(quick_view_field_keys) = self.quick_view_fields {
-            let quick_view_field_ids = quick_view_field_keys
+        if let Some(keys) = self.quick_view_fields {
+            existing.quick_view_fields = keys
                 .into_iter()
-                .map(|field_key| match field_key {
-                    Key::Id(id) => Ok(id),
-                    Key::ApiName(api_name) => existing
-                        .fields
-                        .iter()
-                        .find(|(_, field)| field.api_name == api_name)
-                        .map(|(id, _)| *id)
-                        .ok_or_else(|| {
-                            "Quick view field API name does not match any field".to_string()
-                        }),
+                .map(|k| {
+                    resolve_key(&existing.fields, &k).map_err(|_| {
+                        "Quick view field API name does not match any field".to_string()
+                    })
                 })
                 .collect::<Result<Vec<_>, _>>()?;
-            existing.quick_view_fields = quick_view_field_ids;
+        }
+
+        if let Some(h) = self.hidden {
+            existing.hidden = h;
         }
 
         Ok(())
     }
+}
 
-    pub fn process_fields(
-        fields: &mut HashMap<Uuid, DefinitionField>,
-        new_fields: Vec<FieldDefinitionModel>,
-        rem_fields: Vec<Key>,
-        ctx: &DefinitionContext,
-    ) -> Result<(), String> {
-        for field in new_fields {
-            if let Some(field_id) = field.id {
-                if let Some(existing_field) = fields.get_mut(&field_id) {
-                    if let Some(api_name) = field.api_name {
-                        existing_field.api_name = api_name;
-                    }
-                    if let Some(name) = field.name {
-                        existing_field.name = name;
-                    }
-                    if let Patch::Value(description) = field.description {
-                        existing_field.description = Some(description);
-                    } else if let Patch::Null = field.description {
-                        existing_field.description = None;
-                    }
-                    if let Some(required) = field.required {
-                        existing_field.required = required;
-                    }
-                    if let Some(unique) = field.unique {
-                        existing_field.unique = unique;
-                    }
-                    if let Some(order) = field.order {
-                        existing_field.order = order;
-                    }
+// --- Internal Helper Functions ---
+fn process_fields(
+    fields: &mut HashMap<Uuid, DefinitionField>,
+    new_fields: Vec<FieldDefinitionModel>,
+    rem_fields: Vec<Key>,
+    ctx: &DefinitionContext,
+) -> Result<(), String> {
+    for field in new_fields {
+        if let Some(id) = field.id {
+            let mut existing_field_ref = fields
+                .get(&id)
+                .ok_or_else(|| format!("Field with id {} not found for update", id))?
+                .clone();
 
-                    if let Some(field_type_model) = field.field_type {
-                        let new_field_type = field_type_model.to_field_type(ctx)?;
-                        if std::mem::discriminant(&existing_field.field_type)
-                            == std::mem::discriminant(&new_field_type)
-                        {
-                            //Update inner config
-                            match (&mut existing_field.field_type, &field_type_model) {
-                                (
-                                    FieldType::Select { options, max_items },
-                                    FieldTypeModel::Select {
-                                        options: new_options,
-                                        max_items: new_max_items,
-                                        remove_options,
-                                    },
-                                ) => {
-                                    if let Patch::Value(new_max_items) = new_max_items {
-                                        *max_items = Some(*new_max_items);
-                                    } else if let Patch::Null = new_max_items {
-                                        *max_items = None;
-                                    }
+            update_existing_field(fields, &mut existing_field_ref, field, ctx)?;
+            let existing_field = fields.get_mut(&id).unwrap();
+            *existing_field = existing_field_ref;
+        } else {
+            let (id, new_f) = create_new_field(fields, field, ctx)?;
+            fields.insert(id, new_f);
+        }
+    }
 
-                                    if let Some(remove_options) = remove_options {
-                                        for rem_option in remove_options {
-                                            let rem_option_id = match rem_option {
-                                                Key::Id(id) => id,
-                                                Key::ApiName(api_name) => &options
-                                                    .iter()
-                                                    .find(|o| o.option_api_name == *api_name)
-                                                    .map(|o| o.option_id)
-                                                    .ok_or_else(|| {
-                                                        "Option to remove API name does not match any option".to_string()
-                                                    })?,
-                                            };
-                                            options.retain(|o| o.option_id != *rem_option_id);
-                                        }
-                                    }
+    for rem_key in rem_fields {
+        let id = resolve_key(fields, &rem_key)
+            .map_err(|_| "Field to remove API name does not match any field".to_string())?;
+        fields.remove(&id);
+    }
+    Ok(())
+}
 
-                                    if let Some(new_options) = new_options {
-                                        for new_option in new_options {
-                                            // check for matching api_name or id to update existing option, otherwise add new option
-                                            let old_option =
-                                                if let Some(option_id) = new_option.option_id {
-                                                    options
-                                                        .iter_mut()
-                                                        .find(|o| o.option_id == option_id)
-                                                } else if let Some(option_api_name) =
-                                                    &new_option.option_api_name
-                                                {
-                                                    options.iter_mut().find(|o| {
-                                                        o.option_api_name == *option_api_name
-                                                    })
-                                                } else {
-                                                    None
-                                                };
+fn resolve_key(fields: &HashMap<Uuid, DefinitionField>, key: &Key) -> Result<Uuid, ()> {
+    match key {
+        Key::Id(id) => Ok(*id),
+        Key::ApiName(api) => fields
+            .iter()
+            .find(|(_, f)| f.api_name == *api)
+            .map(|(id, _)| *id)
+            .ok_or(()),
+    }
+}
 
-                                            let Some(old_option) = old_option else {
-                                                options.push(new_option.to_select_display()?);
-                                                continue;
-                                            };
+fn apply_patch<T: Clone>(target: &mut Option<T>, patch: Patch<T>) {
+    match patch {
+        Patch::Value(v) => *target = Some(v),
+        Patch::Null => *target = None,
+        Patch::None => {}
+    }
+}
 
-                                            new_option.update_select_display(old_option);
-                                        }
-                                    }
-                                }
-                                _ => existing_field.field_type = new_field_type,
-                            }
-                        } else {
-                            return Err(
-                                "Field type cannot be changed in update unless it's the same type with same config ids (e.g. select options or reference allowed definitions)"
-                                    .to_string(),
-                            );
-                        }
-                    }
-                } else {
-                    return Err(format!("Field with id {} not found for update", field_id));
-                }
+fn update_existing_field(
+    fields: &HashMap<Uuid, DefinitionField>,
+    existing: &mut DefinitionField,
+    model: FieldDefinitionModel,
+    ctx: &DefinitionContext,
+) -> Result<(), String> {
+    if let Some(api) = model.api_name {
+        fields.values().try_for_each(|f| {
+            if f.api_name == api && f.api_name != existing.api_name {
+                Err("Field API name must be unique across fields of the definition".to_string())
             } else {
-                //add new field
-                let field_id = Uuid::now_v7();
-                let field_type = field
-                    .field_type
-                    .ok_or_else(|| {
-                        "Field type must be provided for each field when creating a definition"
-                            .to_string()
-                    })?
-                    .to_field_type(ctx)?;
-                let api_name = field.api_name.ok_or_else(|| {
-                    "API name must be provided for each field when creating a definition"
-                        .to_string()
-                })?;
-                let name = field.name.ok_or_else(|| {
-                    "Name must be provided for each field when creating a definition".to_string()
-                })?;
-                let description = field.description.into();
-                let required = field.required.unwrap_or(false);
-                let unique = field.unique.unwrap_or(false);
-                let order = field.order.unwrap_or(0);
+                Ok(())
+            }
+        })?;
+        existing.api_name = api;
+    }
+    if let Some(name) = model.name {
+        existing.name = name;
+    }
+    if let Some(req) = model.required {
+        existing.required = req;
+    }
+    if let Some(uni) = model.unique {
+        existing.unique = uni;
+    }
+    if let Some(ord) = model.order {
+        existing.order = ord;
+    }
 
-                fields.insert(
-                    field_id,
-                    DefinitionField {
-                        api_name,
-                        name,
-                        description,
-                        field_type,
-                        required,
-                        unique,
-                        order,
-                    },
-                );
+    apply_patch(&mut existing.description, model.description);
+
+    if let Some(type_model) = model.field_type {
+        let new_type = type_model.to_field_type(ctx)?;
+
+        // Check if discriminants match (same variant)
+        if std::mem::discriminant(&existing.field_type) == std::mem::discriminant(&new_type) {
+            update_field_type_config(fields, &mut existing.field_type, type_model, ctx)?;
+        } else {
+            return Err("Field type cannot be changed in update".to_string());
+        }
+    }
+    Ok(())
+}
+
+fn update_field_type_config(
+    fields: &HashMap<Uuid, DefinitionField>,
+    existing: &mut FieldType,
+    model: FieldTypeModel,
+    ctx: &DefinitionContext,
+) -> Result<(), String> {
+    match (existing, model) {
+        (
+            FieldType::Select { options, max_items },
+            FieldTypeModel::Select {
+                options: new_options,
+                max_items: new_max_items,
+                remove_options,
+            },
+        ) => update_select_config(
+            options,
+            max_items,
+            new_options,
+            new_max_items,
+            remove_options,
+        ),
+        (
+            FieldType::References {
+                allowed_definitions,
+                reference_name,
+                reference_api_name,
+                max_items,
+            },
+            FieldTypeModel::References {
+                allowed_definitions: new_allowed,
+                max_items: new_max_items,
+                reference_name: new_ref_name,
+                reference_api_name: new_ref_api_name,
+            },
+        ) => update_reference_config(
+            fields,
+            allowed_definitions,
+            reference_name,
+            reference_api_name,
+            max_items,
+            new_allowed,
+            new_max_items,
+            new_ref_name,
+            new_ref_api_name,
+            ctx,
+        ),
+        (_, _) => Ok(()),
+    }
+}
+
+fn update_select_config(
+    options: &mut Vec<common_core::definitions::SelectDisplay>,
+    max_items: &mut Option<usize>,
+    new_options: Option<Vec<SelectDisplayModel>>,
+    new_max_items: Patch<usize>,
+    remove_options: Option<Vec<Key>>,
+) -> Result<(), String> {
+    apply_patch(max_items, new_max_items);
+
+    if let Some(removals) = remove_options {
+        for key in removals {
+            let id = match key {
+                Key::Id(id) => id,
+                Key::ApiName(api) => options
+                    .iter()
+                    .find(|o| o.option_api_name == api)
+                    .map(|o| o.option_id)
+                    .ok_or("Option to remove API name does not match")?,
+            };
+            options.retain(|o| o.option_id != id);
+        }
+    }
+
+    if let Some(upserts) = new_options {
+        for new_opt in upserts {
+            let existing_opt = if let Some(id) = new_opt.option_id {
+                options.iter_mut().find(|o| o.option_id == id)
+            } else if let Some(ref api) = new_opt.option_api_name {
+                options.iter_mut().find(|o| o.option_api_name == *api)
+            } else {
+                None
+            };
+
+            match existing_opt {
+                Some(opt) => new_opt.update_select_display(opt),
+                None => options.push(new_opt.to_select_display()?),
             }
         }
-
-        for rem_field in rem_fields {
-            let rem_field_id = match rem_field {
-                Key::Id(id) => id,
-                Key::ApiName(api_name) => fields
-                    .iter()
-                    .find(|(_, field)| field.api_name == api_name)
-                    .map(|(id, _)| *id)
-                    .ok_or_else(|| {
-                        "Field to remove API name does not match any field".to_string()
-                    })?,
-            };
-            fields.remove(&rem_field_id);
-        }
-        Ok(())
     }
+    Ok(())
+}
+
+fn update_reference_config(
+    fields: &HashMap<Uuid, DefinitionField>,
+    allowed_definitions: &mut Option<Vec<DefinitionDisplay>>,
+    reference_name: &mut String,
+    reference_api_name: &mut String,
+    max_items: &mut Option<usize>,
+    new_allowed: Patch<Vec<DefinitionDisplayModel>>,
+    new_max_items: Patch<usize>,
+    new_ref_name: Option<String>,
+    new_ref_api_name: Option<String>,
+    ctx: &DefinitionContext,
+) -> Result<(), String> {
+    match new_allowed {
+        Patch::Value(new_defs) => {
+            let new_def_ids: Vec<DefinitionDisplay> = new_defs
+                .iter()
+                .filter_map(|def_display| {
+                    def_display
+                        .to_definition_display(ctx)
+                        .map_err(|e| {
+                            tracing::error!("Failed to convert to DefinitionDisplay: {}", e);
+                            e
+                        })
+                        .ok()
+                })
+                .collect();
+
+            *allowed_definitions = Some(new_def_ids);
+        }
+        Patch::Null => *allowed_definitions = None,
+        Patch::None => {}
+    }
+
+    apply_patch(max_items, new_max_items);
+
+    if let Some(name) = new_ref_name {
+        *reference_name = name;
+    }
+
+    if let Some(api_name) = new_ref_api_name {
+        fields.values().try_for_each(|f| {
+            if f.api_name == api_name {
+                Err("Reference API name must be unique across fields of the definition".to_string())
+            } else {
+                Ok(())
+            }
+        })?;
+
+        *reference_api_name = api_name;
+    }
+    Ok(())
+}
+
+fn create_new_field(
+    fields: &HashMap<Uuid, DefinitionField>,
+    model: FieldDefinitionModel,
+    ctx: &DefinitionContext,
+) -> Result<(Uuid, DefinitionField), String> {
+    let field_type = model
+        .field_type
+        .ok_or("Field type must be provided for new fields")?
+        .to_field_type(ctx)?;
+    let api_name = model
+        .api_name
+        .ok_or("API name must be provided for new fields")?;
+
+    if fields.values().any(|f| f.api_name == api_name) {
+        return Err("Field API name must be unique across fields of the definition".to_string());
+    }
+
+    let name = model.name.ok_or("Name must be provided for new fields")?;
+
+    let field = DefinitionField {
+        api_name,
+        name,
+        description: model.description.into(),
+        field_type,
+        required: model.required.unwrap_or(false),
+        unique: model.unique.unwrap_or(false),
+        order: model.order.unwrap_or(0),
+        hidden: model.hidden.unwrap_or(false),
+    };
+
+    Ok((Uuid::now_v7(), field))
 }

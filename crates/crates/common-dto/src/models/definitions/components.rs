@@ -1,7 +1,6 @@
 use crate::json::Patch;
-use crate::models::definitions::SelectDisplay;
 use common_core::DefinitionContext;
-use common_core::definitions::DefinitionDisplay;
+use common_core::definitions::{DefinitionDisplay, SelectDisplay};
 use common_core::keys::Key;
 use serde::Deserialize;
 use uuid::Uuid;
@@ -45,7 +44,7 @@ impl SelectDisplayModel {
         match self.color.clone() {
             Patch::Value(v) => existing.color = Some(v),
             Patch::Null => existing.color = None,
-            Patch::Missing => {}
+            Patch::None => {}
         }
     }
 }

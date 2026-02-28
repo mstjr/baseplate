@@ -15,6 +15,7 @@ pub struct Definition {
     /// The field IDs to use as quick view fields for instances of this definition, these must be fields of type Text or that can be converted to Text (e.g. Number, Date, Formula that results in Text, etc.)
     pub quick_view_fields: Vec<Uuid>,
     pub fields: HashMap<Uuid, DefinitionField>,
+    pub hidden: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -26,6 +27,7 @@ pub struct DefinitionField {
     pub required: bool,
     pub unique: bool,
     pub order: usize,
+    pub hidden: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -94,6 +96,10 @@ impl Definition {
             .iter()
             .find(|(_, field)| field.api_name == api_name)
             .map(|(id, _)| *id)
+    }
+
+    pub fn verify_api_name_uniqueness(&self, api_name: &str) -> bool {
+        !self.fields.values().any(|field| field.api_name == api_name)
     }
 }
 

@@ -17,6 +17,7 @@ pub struct FieldDefinitionModel {
     pub required: Option<bool>,
     pub unique: Option<bool>,
     pub order: Option<usize>,
+    pub hidden: Option<bool>,
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -49,6 +50,8 @@ pub enum FieldTypeModel {
         allowed_definitions: Patch<Vec<DefinitionDisplayModel>>,
         #[serde(default)]
         max_items: Patch<usize>,
+        reference_name: Option<String>,
+        reference_api_name: Option<String>,
     },
 }
 
@@ -90,6 +93,8 @@ impl FieldTypeModel {
             FieldTypeModel::References {
                 allowed_definitions,
                 max_items,
+                reference_name,
+                reference_api_name,
             } => FieldType::References {
                 allowed_definitions: match allowed_definitions {
                     Patch::Value(v) => Some(
@@ -100,8 +105,12 @@ impl FieldTypeModel {
                     ),
                     _ => None,
                 },
-                reference_name: String::new(), //TODO: implement this in dto
-                reference_api_name: String::new(), //TODO: implement this in dto
+                reference_name: reference_name.clone().ok_or_else(|| {
+                    "Reference name must be provided for reference field type".to_string()
+                })?,
+                reference_api_name: reference_api_name.clone().ok_or_else(|| {
+                    "Reference API name must be provided for reference field type".to_string()
+                })?,
                 max_items: max_items.into(),
             },
         })

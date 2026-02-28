@@ -2,14 +2,14 @@ use serde::{Deserialize, Deserializer, Serialize};
 
 #[derive(Clone, Debug)]
 pub enum Patch<T> {
-    Missing,
+    None,
     Null,
     Value(T),
 }
 
 impl<T> Patch<T> {
     pub fn is_missing(&self) -> bool {
-        matches!(self, Patch::Missing)
+        matches!(self, Patch::None)
     }
 
     pub fn is_null(&self) -> bool {
@@ -28,6 +28,14 @@ impl<T> Patch<T> {
         }
     }
 
+    pub fn ok_or<E>(&self, err: E) -> Result<&T, E> {
+        if let Patch::Value(v) = self {
+            Ok(v)
+        } else {
+            Err(err)
+        }
+    }
+
     pub fn or_else(self, default: T) -> T {
         match self {
             Patch::Value(v) => v,
@@ -38,7 +46,7 @@ impl<T> Patch<T> {
 
 impl<T> Default for Patch<T> {
     fn default() -> Self {
-        Patch::Missing
+        Patch::None
     }
 }
 
