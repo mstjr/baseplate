@@ -4,7 +4,7 @@ pub fn init() {
     let filter_str = if !cfg!(debug_assertions) {
         "backend=info,tower_http=info,sqlx=info"
     } else {
-        "info"
+        "debug"
     };
 
     let filter_layer =

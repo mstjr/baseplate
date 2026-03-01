@@ -1,6 +1,6 @@
 [worker]
 count = 5
-mode = "http"
+mode = "amqp"
 role = "both"
 
 [worker.http]
@@ -9,4 +9,4 @@ host = "127.0.0.1"
 
 [worker.amqp]
 url = "amqp://localhost"
-queue_name = "test_queue"
+queue_name = "events"

@@ -66,6 +66,8 @@ pub enum EventConfig {
         definition_id: Uuid,
         fields: Vec<Uuid>,
     },
+    DefinitionCreated,
+    DefinitionDeleted,
 }
 
 #[derive(Debug, Clone)]

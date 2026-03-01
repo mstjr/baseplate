@@ -21,6 +21,7 @@ pub async fn run_ampq_worker(
 
     channel.basic_qos(count, BasicQosOptions::default()).await?;
 
+    tracing::debug!("Declaring queue {}", queue_name);
     channel
         .queue_declare(
             queue_name.clone().into(),
@@ -49,6 +50,7 @@ pub async fn run_ampq_worker(
             if let Ok(delivery) = delivery {
                 let data: Event = serde_json::from_slice(&delivery.data).unwrap();
 
+                tracing::debug!("Received message: {:?}", data);
                 execute_event(data, database.as_ref()).await;
 
                 delivery.ack(Default::default()).await.unwrap();
@@ -77,6 +79,8 @@ async fn execute_event(data: Event, db: &dyn TriggerDatabase) {
             definition_id: *definition_id,
             fields: fields.iter().map(|f| f.field_id).collect(),
         },
+        Event::DefinitionCreated { .. } => EventConfig::DefinitionCreated,
+        Event::DefinitionDeleted { .. } => EventConfig::DefinitionDeleted,
     };
 
     let triggers = db.get(&event_config);

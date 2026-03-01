@@ -17,6 +17,14 @@ pub enum Event {
         definition_id: Uuid,
         fields: Vec<FieldEdit>,
     },
+    DefinitionCreated {
+        definition_id: Uuid,
+        definition_api_name: String,
+    },
+    DefinitionDeleted {
+        definition_id: Uuid,
+        definition_api_name: String,
+    },
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

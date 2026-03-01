@@ -1,3 +1,4 @@
+mod db;
 pub mod definitions;
 pub mod keys;
 mod logging;
@@ -7,6 +8,7 @@ pub mod repository;
 use std::{collections::HashMap, str::FromStr};
 
 use chrono::NaiveDate;
+pub use db::init as init_db;
 pub use logging::init as init_logging;
 pub use redis::init as init_redis;
 use uuid::Uuid;
@@ -197,21 +199,23 @@ pub struct DefinitionContext {
 }
 
 impl DefinitionContext {
-    pub fn get_definition_by_key(&self, key: &Key) -> Option<(Uuid, &Definition)> {
+    pub fn get_definition_by_key(&self, key: &Key) -> Option<(Uuid, Definition)> {
         match key {
-            Key::Id(id) => self.definitions.get(id).map(|def| (*id, def)),
-            Key::ApiName(api_name) => self.get_definition_by_api_name(api_name),
+            Key::Id(id) => self.definitions.get(id).map(|def| (*id, def.clone())),
+            Key::ApiName(api_name) => self
+                .get_definition_by_api_name(api_name)
+                .map(|(id, def)| (id, def.clone())),
         }
     }
 
-    pub fn get_definition_by_id(&self, id: &Uuid) -> Option<&Definition> {
-        self.definitions.get(id)
+    pub fn get_definition_by_id(&self, id: &Uuid) -> Option<Definition> {
+        self.definitions.get(id).cloned()
     }
 
-    pub fn get_definition_by_api_name(&self, api_name: &str) -> Option<(Uuid, &Definition)> {
+    pub fn get_definition_by_api_name(&self, api_name: &str) -> Option<(Uuid, Definition)> {
         self.api_name_index
             .get(api_name)
-            .and_then(|id| self.definitions.get(id).map(|def| (*id, def)))
+            .and_then(|id| self.definitions.get(id).map(|def| (*id, def.clone())))
     }
 
     pub fn verify_api_name_uniqueness(&self, api_name: &str) -> bool {
@@ -227,6 +231,18 @@ impl DefinitionContext {
             .iter()
             .map(|(id, def)| (*id, def))
             .collect()
+    }
+
+    pub fn from_definitions(definitions: HashMap<Uuid, Definition>) -> Self {
+        let mut context = DefinitionContext::default();
+        for (id, def) in definitions {
+            context.api_name_index.insert(def.api_name.clone(), id);
+            for (field_id, field) in &def.fields {
+                context.field_id_index.insert(*field_id, field.clone());
+            }
+            context.definitions.insert(id, def);
+        }
+        context
     }
 }
 
