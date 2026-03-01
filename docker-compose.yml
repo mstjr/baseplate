@@ -1,6 +1,6 @@
 # At the moment this docker-compose is for development purposes only.
 
-sservices:
+services:
   redis:
     image: redis:latest
     ports:
