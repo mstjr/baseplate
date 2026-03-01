@@ -17,7 +17,11 @@ pub fn router() -> axum::Router<AppState> {
     axum::Router::new()
         .route(
             "/{definition}/instances",
-            axum::routing::get(list_instances).post(create_instance),
+            axum::routing::get(list_instances),
+        )
+        .route(
+            "/{definition}/instance",
+            axum::routing::post(create_instance),
         )
         .route(
             "/{definition}/instance/{id}",
