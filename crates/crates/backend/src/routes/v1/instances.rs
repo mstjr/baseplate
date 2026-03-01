@@ -23,6 +23,7 @@ pub fn router() -> axum::Router<AppState> {
             "/{definition}/instance/{id}",
             axum::routing::get(get_instance)
                 .put(update_instance)
+                .patch(update_partial_instance)
                 .delete(delete_instance),
         )
 }
@@ -72,10 +73,31 @@ async fn list_instances(
     Ok(axum::Json(views))
 }
 async fn get_instance(
-    State(_state): State<AppState>,
-    axum::extract::Path(_id): axum::extract::Path<String>,
-) {
-    todo!()
+    State(state): State<AppState>,
+    axum::extract::Path((definition, instance_id)): axum::extract::Path<(Key, Uuid)>,
+) -> Result<Json<InstanceView>, String> {
+    let context = state.definition_repository.get_definition_context().await;
+    let (_, definition) = context
+        .get_definition_by_key(&definition)
+        .ok_or_else(|| format!("Definition not found for key: {:?}", definition))?;
+
+    let instance = state.instance_repository.get_instance(&instance_id).await;
+
+    if let Some((instance_id, instance)) = instance {
+        let key_type = KeyType::Id;
+        let view = InstanceView::from_instance(
+            &instance_id,
+            &instance,
+            &definition,
+            &context,
+            key_type,
+            state.instance_repository.clone(),
+        )
+        .await;
+        Ok(Json(view))
+    } else {
+        Err("Instance not found".into())
+    }
 }
 
 #[axum::debug_handler]
@@ -128,14 +150,135 @@ async fn create_instance(
 
 async fn update_instance(
     State(_state): State<AppState>,
-    axum::extract::Path(_id): axum::extract::Path<String>,
-) {
-    todo!()
+    axum::extract::Path((definition, instance_id)): axum::extract::Path<(Key, Uuid)>,
+    Query(_query): Query<HashMap<String, String>>,
+    Json(_payload): Json<InstanceModel>,
+) -> Result<Json<InstanceView>, String> {
+    let context = _state.definition_repository.get_definition_context().await;
+    let (definition_id, definition) = context
+        .get_definition_by_key(&definition)
+        .ok_or_else(|| format!("Definition not found for key: {:?}", definition))
+        .unwrap();
+
+    let resolved = _payload
+        .resolve(&definition, &context)
+        .map_err(|e| format!("Failed to resolve instance model: {}", e))
+        .unwrap();
+
+    let all_fields_present = definition
+        .fields
+        .iter()
+        .all(|field| resolved.contains_key(field.0));
+
+    if !all_fields_present {
+        return Err("Missing fields in payload".into());
+    }
+
+    let new_instance = Instance {
+        definition_id,
+        fields: resolved,
+    };
+
+    let update_result = _state
+        .instance_repository
+        .update_instance(instance_id, new_instance.clone())
+        .await;
+
+    if !update_result {
+        return Err("Failed to update instance".into());
+    }
+
+    let key_type = _query
+        .get("key_type")
+        .and_then(|kt| KeyType::from_str(kt).ok())
+        .unwrap_or(KeyType::Id);
+
+    let view = InstanceView::from_instance(
+        &instance_id,
+        &new_instance,
+        &definition,
+        &context,
+        key_type,
+        _state.instance_repository.clone(),
+    )
+    .await;
+
+    Ok(Json(view))
+}
+
+async fn update_partial_instance(
+    State(_state): State<AppState>,
+    axum::extract::Path((definition, instance_id)): axum::extract::Path<(Key, Uuid)>,
+    Query(_query): Query<HashMap<String, String>>,
+    Json(_payload): Json<InstanceModel>,
+) -> Result<Json<InstanceView>, String> {
+    let context = _state.definition_repository.get_definition_context().await;
+    let (definition_id, definition) = context
+        .get_definition_by_key(&definition)
+        .ok_or_else(|| format!("Definition not found for key: {:?}", definition))
+        .unwrap();
+
+    let resolved = _payload
+        .resolve(&definition, &context)
+        .map_err(|e| format!("Failed to resolve instance model: {}", e))
+        .unwrap();
+
+    let existing_instance = _state
+        .instance_repository
+        .get_instance(&instance_id)
+        .await
+        .ok_or_else(|| "Instance not found".to_string())
+        .unwrap();
+
+    let mut updated_fields = existing_instance.1.fields.clone();
+    for (key, value) in resolved {
+        updated_fields.insert(key, value);
+    }
+
+    let updated_instance = Instance {
+        definition_id,
+        fields: updated_fields,
+    };
+
+    let update_result = _state
+        .instance_repository
+        .update_instance(instance_id, updated_instance.clone())
+        .await;
+
+    if !update_result {
+        return Err("Failed to update instance".into());
+    }
+
+    let key_type = _query
+        .get("key_type")
+        .and_then(|kt| KeyType::from_str(kt).ok())
+        .unwrap_or(KeyType::Id);
+
+    let view = InstanceView::from_instance(
+        &instance_id,
+        &updated_instance,
+        &definition,
+        &context,
+        key_type,
+        _state.instance_repository.clone(),
+    )
+    .await;
+
+    Ok(Json(view))
 }
 
 async fn delete_instance(
     State(_state): State<AppState>,
-    axum::extract::Path(_id): axum::extract::Path<String>,
-) {
-    todo!()
+    axum::extract::Path((_, instance_id)): axum::extract::Path<(Key, Uuid)>,
+) -> Result<(), String> {
+    let delete_result = _state
+        .instance_repository
+        .delete_instance(&instance_id)
+        .await;
+
+    if !delete_result {
+        return Err("Failed to delete instance".into());
+    }
+
+    Ok(())
 }
