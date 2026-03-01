@@ -1,5 +1,6 @@
 mod db;
 pub mod definitions;
+pub mod instances;
 pub mod keys;
 mod logging;
 mod redis;
@@ -11,6 +12,7 @@ use chrono::NaiveDate;
 pub use db::init as init_db;
 pub use logging::init as init_logging;
 pub use redis::init as init_redis;
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
@@ -19,7 +21,7 @@ use crate::{
 };
 
 /// Represents a reference to an instance, containing its unique identifier and definition identifier.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub enum FieldValue {
     Text(String),
     Number(f64),
@@ -185,7 +187,7 @@ impl FieldValue {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Deserialize, Serialize)]
 pub struct InstanceReference {
     pub definition_id: uuid::Uuid,
     pub instance_id: uuid::Uuid,

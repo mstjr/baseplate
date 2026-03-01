@@ -1,17 +1,20 @@
 mod routes;
 use std::sync::Arc;
 
-use common_core::repository::PostgresDefinitionRepository;
+use common_core::{
+    init_logging,
+    repository::{PostgresDefinitionRepository, PostgresInstanceRepository},
+};
 use tower_http::cors::CorsLayer;
 
 #[derive(Clone)]
 pub struct AppState {
     definition_repository: Arc<dyn common_core::repository::DefinitionRepository + Send + Sync>,
+    instance_repository: Arc<dyn common_core::repository::InstanceRepository + Send + Sync>,
     worker_producer: Arc<WorkerProducer>,
 }
 
 pub struct WorkerProducer {
-    client: lapin::Connection,
     channel: lapin::Channel,
     queue_name: String,
 }
@@ -23,7 +26,6 @@ impl WorkerProducer {
         let channel = client.create_channel().await?;
 
         Ok(Self {
-            client,
             channel,
             queue_name,
         })
@@ -51,6 +53,7 @@ impl WorkerProducer {
 
 #[tokio::main]
 async fn main() {
+    init_logging();
     let database_url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5432/postgres".to_string());
     let pool = common_core::init_db(&database_url)
@@ -69,7 +72,7 @@ async fn main() {
         .await
         .expect("Failed to bind to address");
 
-    println!("Server running on http://127.0.0.1:3000");
+    tracing::info!("Server running on http://127.0.0.1:3000");
 
     let cors_layer = CorsLayer::default()
         .allow_origin(tower_http::cors::Any)
@@ -79,7 +82,8 @@ async fn main() {
     let app = axum::Router::new()
         .nest("/api", routes::app())
         .with_state(AppState {
-            definition_repository: Arc::new(PostgresDefinitionRepository::new(pool)),
+            definition_repository: Arc::new(PostgresDefinitionRepository::new(pool.clone())),
+            instance_repository: Arc::new(PostgresInstanceRepository::new(pool.clone())),
             worker_producer: Arc::new(worker_producer),
         })
         .layer(cors_layer);

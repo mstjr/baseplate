@@ -9,5 +9,5 @@ pub fn app() -> axum::Router<AppState> {
 fn v1() -> axum::Router<AppState> {
     axum::Router::new()
         .nest("/definitions", v1::definitions::router())
-        .nest("/instances", v1::instances::router())
+        .nest("/definitions", v1::instances::router())
 }

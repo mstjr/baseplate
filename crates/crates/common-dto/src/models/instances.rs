@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 #[derive(Deserialize, Clone, Debug, Default)]
 #[serde(default)]
-pub struct InstanceInput {
+pub struct InstanceModel {
     pub fields: HashMap<Key, Value>,
 }
 
@@ -28,7 +28,7 @@ pub enum InstanceValidateError {
     InvalidReference { field_id: Key },
 }
 
-impl InstanceInput {
+impl InstanceModel {
     pub fn resolve(
         &self,
         definition: &Definition,
