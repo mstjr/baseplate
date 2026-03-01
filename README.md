@@ -1,4 +1,4 @@
-# OpenCRM
+# Baseplate
 
 A modern, developer-friendly, and **truly customizable** open-source CRM built for speed and flexibility.
 
@@ -10,7 +10,7 @@ A modern, developer-friendly, and **truly customizable** open-source CRM built f
     <h2 style="margin: 0; font-size: 1.25rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;">Status: WIP</h2>
   </div>
   <p style="margin: 0; line-height: 1.6;">
-    <strong>OpenCRM is under active construction.</strong> The architecture and core concepts are evolving rapidly. 
+    <strong>Baseplate is under active construction.</strong> The architecture and core concepts are evolving rapidly. 
     Expect <strong>breaking changes</strong> and database schema shifts without migration paths between early versions. 
     <br><br>
     <em>Proceed with caution: This is not currently suitable for production use.</em>

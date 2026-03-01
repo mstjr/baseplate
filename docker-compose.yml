@@ -1,9 +1,10 @@
-services:
+# At the moment this docker-compose is for development purposes only.
+
+sservices:
   redis:
     image: redis:latest
     ports:
       - "6379:6379"
-
   rabbitmq:
     image: rabbitmq:4.2-management
     ports:
