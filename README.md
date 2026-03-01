@@ -14,6 +14,8 @@ A modern, developer-friendly, and **truly customizable** open-source CRM built f
     Expect <strong>breaking changes</strong> and database schema shifts without migration paths between early versions. 
     <br><br>
     <em>Proceed with caution: This is not currently suitable for production use.</em>
+    <br><br>
+    <em>Some features presented in this README may not be implemented yet or may change significantly.</em>
   </p>
 </div>
 
@@ -37,7 +39,7 @@ After experimenting with excellent tools like [Twenty](https://twenty.com), I re
 
 The system operates on a "System vs. Custom" logic. While you can build anything, we provide a robust foundation:
 
-### Default Definitions
+### Default Definitions (not done yet)
 
 | Entity        | Key System Fields                                |
 | ------------- | ------------------------------------------------ |
@@ -65,7 +67,7 @@ We've chosen a modern, high-performance stack to ensure the CRM can scale with y
 
 ## Roadmap & User Stories
 
-Currently, the project is in **Early Alpha**. Our development is guided by these core capabilities:
+Currently, the project is in **WIP**. Our development is guided by these core capabilities:
 
 * [ ] **Data Modeling:** Create/Read/Update/Delete (CRUD) for custom definitions and fields.
 * [x] **Automation Engine:** Trigger-based actions and custom code execution.
