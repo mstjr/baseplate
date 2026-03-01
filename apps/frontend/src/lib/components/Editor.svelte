@@ -34,7 +34,7 @@
 	onMount(() => {
 		// 1. Configuration de l'extension LSP
 		const ls = languageServer({
-			serverUri: 'ws://localhost:3000/python',
+			serverUri: 'ws://localhost:3000/python', //TODO: Request to open an LSP connection to the backend worker instead of hardcoding this URL or use a SPA to host the LSP in the browser of the user.
 			rootUri: 'file:///app/workspace',
 			documentUri: 'file:///app/workspace/script.py',
 			languageId: 'python',

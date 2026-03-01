@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            DELETE FROM instance_fields WHERE instance_id = $1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ddbea7c7f1ed1a6ea47dc0e82dffc131cfbd1e8c81e07da72d57b40710d127d2"
+}

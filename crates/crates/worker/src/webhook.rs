@@ -26,12 +26,13 @@ pub struct Webhook {
 
 impl Webhook {
     pub fn build(self, client: &reqwest::Client) -> Result<reqwest::Request, reqwest::Error> {
+        let context = common_core::DefinitionContext::default(); //TODO: Pass the actual context when available to process dynamic values.
         // Process query parameters
         let mut url = reqwest::Url::parse(&self.url).expect("Invalid URL");
         {
             let mut query_pairs = url.query_pairs_mut();
             for (key, value) in &self.parameters {
-                let param_value = value.to_string();
+                let param_value = value.to_string(&context);
                 query_pairs.append_pair(key, &param_value);
             }
         }
@@ -39,14 +40,14 @@ impl Webhook {
 
         // Process headers
         for (key, value) in &self.headers {
-            let header_value = value.to_string();
+            let header_value = value.to_string(&context);
             request = request.header(key, header_value);
         }
         // Process JSON body
         if !self.json_body.is_empty() {
             let mut json_body = serde_json::Map::new();
             for (key, value) in &self.json_body {
-                let body_value = value.to_json_value();
+                let body_value = value.to_json_value(&context);
                 json_body.insert(key.clone(), body_value);
             }
 
@@ -104,12 +105,5 @@ mod tests {
             request.body().unwrap().as_bytes(),
             Some(r#"{"key":"value"}"#.as_bytes())
         );
-
-        let response = reqwest::Client::new()
-            .execute(request.try_clone().unwrap())
-            .await
-            .unwrap();
-
-        assert!(response.status().is_success());
     }
 }

@@ -72,8 +72,8 @@ async fn list_instances(
     Ok(axum::Json(views))
 }
 async fn get_instance(
-    State(state): State<AppState>,
-    axum::extract::Path(id): axum::extract::Path<String>,
+    State(_state): State<AppState>,
+    axum::extract::Path(_id): axum::extract::Path<String>,
 ) {
     todo!()
 }
@@ -127,15 +127,15 @@ async fn create_instance(
 }
 
 async fn update_instance(
-    State(state): State<AppState>,
-    axum::extract::Path(id): axum::extract::Path<String>,
+    State(_state): State<AppState>,
+    axum::extract::Path(_id): axum::extract::Path<String>,
 ) {
     todo!()
 }
 
 async fn delete_instance(
-    State(state): State<AppState>,
-    axum::extract::Path(id): axum::extract::Path<String>,
+    State(_state): State<AppState>,
+    axum::extract::Path(_id): axum::extract::Path<String>,
 ) {
     todo!()
 }

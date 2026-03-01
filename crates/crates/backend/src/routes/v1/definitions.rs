@@ -36,7 +36,7 @@ async fn list_definitions(
     let mut views = Vec::new();
     for (def_id, def) in context.get_all_definitions() {
         views.push(DefinitionView::from_definition(
-            &def, &def_id, &context, key_type,
+            def, &def_id, &context, key_type,
         ));
     }
     Json(views)

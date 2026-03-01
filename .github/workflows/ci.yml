@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  rust:
+    name: Rust Backend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./crates
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+          
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ./crates
+        
+      - name: Check Formatting
+        run: SQLX_OFFLINE=true cargo fmt --all -- --check
+        
+      - name: Clippy
+        run: SQLX_OFFLINE=true cargo clippy --all-targets --all-features -- -D warnings
+        
+      - name: Run Tests
+        run: SQLX_OFFLINE=true cargo test --all-targets --all-features
+
+  frontend:
+    name: SvelteKit Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./apps/frontend
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+          run_install: false
+          
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+          cache-dependency-path: './apps/frontend/pnpm-lock.yaml'
+            
+      - name: Install Dependencies
+        run: pnpm install
+        
+      - name: Lint and Format
+        run: |
+          pnpm lint
+          
+      - name: Svelte Check (TypeScript)
+        run: pnpm check
+        
+      - name: Build
+        run: pnpm build

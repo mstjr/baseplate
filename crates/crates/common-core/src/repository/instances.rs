@@ -63,7 +63,7 @@ impl InstanceRepository for PostgresInstanceRepository {
 
         let instance = Instance {
             definition_id: row.definition_id,
-            fields: fields,
+            fields,
         };
 
         Some((row.id, instance))

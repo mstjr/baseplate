@@ -46,6 +46,20 @@ pub struct AmqpWorkerConfig {
 mod tests {
     use super::*;
 
+    static CONFIG_STR: &str = r#"[worker]
+count = 5
+mode = "http"
+role = "both"
+
+[worker.http]
+port = 8080
+host = "localhost"
+
+[worker.amqp]
+url = "amqp://localhost"
+queue_name = "test_queue"
+"#;
+
     #[test]
     fn test_worker_config_serialization() {
         let config = WorkerConfig {
@@ -64,12 +78,13 @@ mod tests {
 
         let config = Config { worker: config };
 
-        std::fs::write("config.toml", toml::to_string(&config).unwrap()).unwrap();
+        let serialized = toml::to_string(&config).unwrap();
+        assert_eq!(serialized, CONFIG_STR);
     }
 
     #[test]
     fn test_worker_config_deserialization() {
-        let config_str = std::fs::read_to_string("config.toml").unwrap();
+        let config_str = CONFIG_STR.to_string();
         let config: Config = toml::from_str(&config_str).unwrap();
 
         assert_eq!(config.worker.count, 5);

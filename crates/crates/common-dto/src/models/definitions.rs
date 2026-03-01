@@ -317,6 +317,7 @@ fn update_select_config(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)] //TODO: Refactor to reduce arguments, possibly by grouping related parameters into structs.
 fn update_reference_config(
     fields: &HashMap<Uuid, DefinitionField>,
     allowed_definitions: &mut Option<Vec<DefinitionDisplay>>,

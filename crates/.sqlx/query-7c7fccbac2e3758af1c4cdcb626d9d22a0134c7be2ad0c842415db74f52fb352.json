@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO definitions (id, api_name, singular_name, plural_name, description, title_field, quick_view_fields, fields)\n            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Uuid",
+        "UuidArray",
+        "Jsonb"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7c7fccbac2e3758af1c4cdcb626d9d22a0134c7be2ad0c842415db74f52fb352"
+}

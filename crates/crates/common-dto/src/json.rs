@@ -1,7 +1,8 @@
 use serde::{Deserialize, Deserializer, Serialize};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub enum Patch<T> {
+    #[default]
     None,
     Null,
     Value(T),
@@ -41,12 +42,6 @@ impl<T> Patch<T> {
             Patch::Value(v) => v,
             _ => default,
         }
-    }
-}
-
-impl<T> Default for Patch<T> {
-    fn default() -> Self {
-        Patch::None
     }
 }
 

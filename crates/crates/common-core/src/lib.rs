@@ -105,10 +105,10 @@ impl FieldValue {
                     pattern_example: _,
                 },
             ) => {
-                if let Some(max) = max_length {
-                    if value.len() > *max {
-                        return Err(FieldValidateError::TextTooLong { max_length: *max });
-                    }
+                if let Some(max) = max_length
+                    && value.len() > *max
+                {
+                    return Err(FieldValidateError::TextTooLong { max_length: *max });
                 }
                 if let Some(pat) = pattern {
                     let regex = regex::Regex::new(pat)
@@ -120,15 +120,15 @@ impl FieldValue {
                 Ok(())
             }
             (FieldValue::Number(value), FieldType::Number { min, max }) => {
-                if let Some(min) = min {
-                    if *value < *min {
-                        return Err(FieldValidateError::NumberTooSmall { min: *min });
-                    }
+                if let Some(min) = min
+                    && *value < *min
+                {
+                    return Err(FieldValidateError::NumberTooSmall { min: *min });
                 }
-                if let Some(max) = max {
-                    if *value > *max {
-                        return Err(FieldValidateError::NumberTooLarge { max: *max });
-                    }
+                if let Some(max) = max
+                    && *value > *max
+                {
+                    return Err(FieldValidateError::NumberTooLarge { max: *max });
                 }
                 Ok(())
             }
@@ -153,10 +153,10 @@ impl FieldValue {
                     }
                 }
 
-                if let Some(max) = max_items {
-                    if references.len() > *max {
-                        return Err(FieldValidateError::TooManyReferences { max_items: *max });
-                    }
+                if let Some(max) = max_items
+                    && references.len() > *max
+                {
+                    return Err(FieldValidateError::TooManyReferences { max_items: *max });
                 }
 
                 Ok(())
@@ -168,10 +168,10 @@ impl FieldValue {
                     max_items,
                 },
             ) => {
-                if let Some(max) = max_items {
-                    if options.len() > *max {
-                        return Err(FieldValidateError::TooManyReferences { max_items: *max });
-                    }
+                if let Some(max) = max_items
+                    && options.len() > *max
+                {
+                    return Err(FieldValidateError::TooManyReferences { max_items: *max });
                 }
 
                 let def_option_ids: Vec<Uuid> = def_options.iter().map(|o| o.option_id).collect();

@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT field_id, value, instance_id FROM instance_fields WHERE instance_id = ANY($1)\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "field_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "value",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 2,
+        "name": "instance_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "2df13968319d2d8915cc561286ffb9e336420f637d536b6f09384f57e5a96bba"
+}

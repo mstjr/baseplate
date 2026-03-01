@@ -1,0 +1,68 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT id, api_name, singular_name, plural_name, description, title_field, quick_view_fields, fields, hidden\n            FROM definitions\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "api_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "singular_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "plural_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "description",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "title_field",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 6,
+        "name": "quick_view_fields",
+        "type_info": "UuidArray"
+      },
+      {
+        "ordinal": 7,
+        "name": "fields",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 8,
+        "name": "hidden",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "fa08e2906a991234ad309bc8a44b68000d5a3f0c35a43b730fc587e888769bcf"
+}

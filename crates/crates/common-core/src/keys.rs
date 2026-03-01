@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{fmt::Display, str::FromStr};
 
 use serde::{Deserialize, Deserializer, Serialize};
 use uuid::Uuid;
@@ -27,11 +27,11 @@ impl FromStr for KeyType {
     }
 }
 
-impl ToString for KeyType {
-    fn to_string(&self) -> String {
+impl Display for KeyType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            KeyType::Id => "id".to_string(),
-            KeyType::ApiName => "api_name".to_string(),
+            KeyType::Id => write!(f, "id"),
+            KeyType::ApiName => write!(f, "api_name"),
         }
     }
 }

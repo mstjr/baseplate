@@ -12,15 +12,14 @@ use deadpool_redis::{Config, Runtime};
 ///
 /// # Returns
 ///
-/// Returns a `Config` struct with the parsed connection parameters.
-///
-/// # Example
-///
-/// ```
-/// let cfg = Config::from_url("redis://localhost:6379/0");
-/// ```
+/// Returns a `Result` containing a `Pool` if the URL is valid and the pool was created successfully, or a `CreatePoolError` if there was an issue with the URL or pool creation.
 /// # Errors
 /// If the provided URL is invalid or cannot be parsed, this function will return an error.
+///
+/// ```
+/// use common_core::init_redis;
+/// let pool = init_redis("redis://localhost:6379/0").expect("Failed to initialize Redis pool");
+/// ```
 pub fn init(redis_url: &str) -> Result<deadpool_redis::Pool, deadpool_redis::CreatePoolError> {
     let cfg = Config::from_url(redis_url);
     cfg.create_pool(Some(Runtime::Tokio1))

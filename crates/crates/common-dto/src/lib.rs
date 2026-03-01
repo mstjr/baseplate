@@ -34,7 +34,7 @@ pub enum InputValue {
 #[allow(deprecated)] //TODO: Remove this when InstanceValue and InstanceReference are implemented.
 impl InputValue {
     /// Returns a string representation of the InputValue,
-    pub fn to_string(&self) -> String {
+    pub fn to_string(&self, _context: &common_core::DefinitionContext) -> String {
         match self {
             InputValue::Constant(value) => {
                 if let serde_json::Value::String(s) = value {
@@ -52,7 +52,7 @@ impl InputValue {
         }
     }
 
-    pub fn to_json_value(&self) -> serde_json::Value {
+    pub fn to_json_value(&self, _context: &common_core::DefinitionContext) -> serde_json::Value {
         match self {
             InputValue::Constant(value) => value.clone(),
             InputValue::InstanceValue(_) => unimplemented!(

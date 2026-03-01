@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE definitions \n            SET api_name = $2, singular_name = $3, plural_name = $4, description = $5, title_field = $6, quick_view_fields = $7, fields = $8 \n            WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Uuid",
+        "UuidArray",
+        "Jsonb"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "751d0518664685b8b92f9450e18354b697ed52f0c3ef2bc96cd06ee53901d09a"
+}
