@@ -8,7 +8,7 @@ use common_core::{
     instances::Instance,
     keys::{Key, KeyType},
 };
-use common_dto::{models::InstanceModel, views::InstanceView};
+use common_dto::{events::FieldEdit, models::InstanceModel, views::InstanceView};
 use uuid::Uuid;
 
 use crate::AppState;
@@ -149,6 +149,15 @@ async fn create_instance(
     )
     .await;
 
+    state
+        .worker_producer
+        .send_event(common_dto::events::Event::InstanceCreated {
+            instance_id,
+            definition_id,
+        })
+        .await
+        .map_err(|e| format!("Failed to send event: {}", e))?; //TODO: Might not want to fail the request if the event sending fails, consider logging instead it so the user can retry the event sending without having to recreate the instance
+
     Ok(Json(view))
 }
 
@@ -183,6 +192,26 @@ async fn update_instance(
         fields: resolved,
     };
 
+    let old_fields = _state
+        .instance_repository
+        .get_instance(&instance_id)
+        .await
+        .ok_or_else(|| "Instance not found".to_string())
+        .unwrap()
+        .1
+        .fields;
+
+    let field_edits: Vec<FieldEdit> = old_fields
+        .iter()
+        .filter_map(|(id, old_value)| {
+            new_instance.fields.get(id).map(|new_value| FieldEdit {
+                old_value: old_value.clone(),
+                new_value: new_value.clone(),
+                field_id: id.clone(),
+            })
+        })
+        .collect();
+
     let update_result = _state
         .instance_repository
         .update_instance(instance_id, new_instance.clone())
@@ -206,6 +235,16 @@ async fn update_instance(
         _state.instance_repository.clone(),
     )
     .await;
+
+    _state
+        .worker_producer
+        .send_event(common_dto::events::Event::InstanceUpdated {
+            instance_id,
+            definition_id,
+            fields: field_edits,
+        })
+        .await
+        .map_err(|e| format!("Failed to send event: {}", e))?;
 
     Ok(Json(view))
 }
@@ -234,10 +273,22 @@ async fn update_partial_instance(
         .ok_or_else(|| "Instance not found".to_string())
         .unwrap();
 
+    let old_fields = existing_instance.1.fields.clone();
     let mut updated_fields = existing_instance.1.fields.clone();
     for (key, value) in resolved {
         updated_fields.insert(key, value);
     }
+
+    let field_edits: Vec<FieldEdit> = old_fields
+        .iter()
+        .filter_map(|(id, old_value)| {
+            updated_fields.get(id).map(|new_value| FieldEdit {
+                old_value: old_value.clone(),
+                new_value: new_value.clone(),
+                field_id: id.clone(),
+            })
+        })
+        .collect();
 
     let updated_instance = Instance {
         definition_id,
@@ -268,13 +319,29 @@ async fn update_partial_instance(
     )
     .await;
 
+    _state
+        .worker_producer
+        .send_event(common_dto::events::Event::InstanceUpdated {
+            instance_id,
+            definition_id,
+            fields: field_edits,
+        })
+        .await
+        .map_err(|e| format!("Failed to send event: {}", e))?;
+
     Ok(Json(view))
 }
 
 async fn delete_instance(
     State(_state): State<AppState>,
-    axum::extract::Path((_, instance_id)): axum::extract::Path<(Key, Uuid)>,
+    axum::extract::Path((definition, instance_id)): axum::extract::Path<(Key, Uuid)>,
 ) -> Result<(), String> {
+    let context = _state.definition_repository.get_definition_context().await;
+    let (definition_id, _) = context
+        .get_definition_by_key(&definition)
+        .ok_or_else(|| format!("Definition not found for key: {:?}", definition))
+        .unwrap();
+
     let delete_result = _state
         .instance_repository
         .delete_instance(&instance_id)
@@ -283,6 +350,15 @@ async fn delete_instance(
     if !delete_result {
         return Err("Failed to delete instance".into());
     }
+
+    _state
+        .worker_producer
+        .send_event(common_dto::events::Event::InstanceDeleted {
+            instance_id,
+            definition_id,
+        })
+        .await
+        .map_err(|e| format!("Failed to send event: {}", e))?;
 
     Ok(())
 }
