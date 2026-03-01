@@ -1,3 +1,4 @@
+use common_core::FieldValue;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -30,6 +31,6 @@ pub enum Event {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct FieldEdit {
     pub field_id: Uuid,
-    pub old_value: serde_json::Value,
-    pub new_value: serde_json::Value,
+    pub old_value: FieldValue,
+    pub new_value: FieldValue,
 }
