@@ -18,42 +18,6 @@ pub struct InstanceView {
     pub fields: HashMap<Key, InstanceFieldValueView>,
 }
 
-impl InstanceView {
-    pub async fn from_instance(
-        instance_id: &Uuid,
-        instance: &Instance,
-        definition: &Definition,
-        context: &DefinitionContext,
-        key_type: KeyType,
-        instance_repository: Arc<dyn InstanceRepository + Send + Sync>,
-    ) -> Self {
-        let mut fields = HashMap::new();
-        for (id, val) in instance.fields.iter() {
-            let field_def = match definition.fields.get(id) {
-                Some(fd) => fd,
-                None => continue,
-            };
-            let key = Key::from_parts(key_type, id, &field_def.api_name);
-            let view = InstanceFieldValueView::from_internal(
-                id,
-                val,
-                definition,
-                context,
-                instance_repository.as_ref(),
-                key_type,
-            )
-            .await;
-            fields.insert(key, view);
-        }
-
-        Self {
-            id: *instance_id,
-            definition_id: instance.definition_id,
-            fields,
-        }
-    }
-}
-
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "type", content = "value", rename_all = "snake_case")]
 pub enum InstanceFieldValueView {
@@ -63,54 +27,6 @@ pub enum InstanceFieldValueView {
     Boolean(bool),
     Select(Vec<InstanceSelectOptionView>),
     References(Vec<InstanceReferenceView>),
-}
-
-impl InstanceFieldValueView {
-    async fn from_internal(
-        field_id: &Uuid,
-        value: &FieldValue,
-        definition: &Definition,
-        ctx: &DefinitionContext,
-        instance_repository: &dyn InstanceRepository,
-        kt: KeyType,
-    ) -> Self {
-        match value {
-            FieldValue::Text(s) => Self::Text(s.clone()),
-            FieldValue::Number(n) => Self::Number(*n),
-            FieldValue::Boolean(b) => Self::Boolean(*b),
-            FieldValue::Date(d) => Self::Date(d.format("%Y-%m-%d").to_string()),
-            FieldValue::Select(select) => Self::Select(
-                select
-                    .iter()
-                    .filter_map(|option_id| {
-                        let field_def = definition.fields.get(field_id)?;
-                        if let FieldType::Select { options, .. } = &field_def.field_type {
-                            options.iter().find(|o| &o.option_id == option_id).map(|o| {
-                                InstanceSelectOptionView {
-                                    id: o.option_id,
-                                    display_value: o.display_value.clone(),
-                                    color: o.color.clone(),
-                                }
-                            })
-                        } else {
-                            None
-                        }
-                    })
-                    .collect::<Vec<_>>(),
-            ),
-            FieldValue::References(refs) => {
-                let mut views = Vec::new();
-                for reference in refs {
-                    if let Some(view) =
-                        InstanceReferenceView::new(reference, ctx, instance_repository, kt).await
-                    {
-                        views.push(view);
-                    }
-                }
-                Self::References(views)
-            }
-        }
-    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -197,16 +113,71 @@ impl InstanceViewAssembler {
 
     pub async fn assemble(&self, instance_id: &Uuid, instance: &Instance) -> Option<InstanceView> {
         let definition = self.context.get_definition_by_id(&instance.definition_id)?;
-        Some(
-            InstanceView::from_instance(
-                &instance_id,
-                &instance,
-                &definition,
-                &self.context,
-                self.key_type,
-                self.instance_repository.clone(),
-            )
-            .await,
-        )
+
+        let mut fields = HashMap::new();
+        for (id, val) in instance.fields.iter() {
+            let field_def = match definition.fields.get(id) {
+                Some(fd) => fd,
+                None => continue,
+            };
+            let key = Key::from_parts(self.key_type, id, &field_def.api_name);
+            let view = self.assemble_field_value_view(id, val, &definition).await;
+            fields.insert(key, view);
+        }
+
+        Some(InstanceView {
+            id: *instance_id,
+            definition_id: instance.definition_id,
+            fields,
+        })
+    }
+
+    async fn assemble_field_value_view(
+        &self,
+        field_id: &Uuid,
+        value: &FieldValue,
+        definition: &Definition,
+    ) -> InstanceFieldValueView {
+        match value {
+            FieldValue::Text(s) => InstanceFieldValueView::Text(s.clone()),
+            FieldValue::Number(n) => InstanceFieldValueView::Number(*n),
+            FieldValue::Boolean(b) => InstanceFieldValueView::Boolean(*b),
+            FieldValue::Date(d) => InstanceFieldValueView::Date(d.format("%Y-%m-%d").to_string()),
+            FieldValue::Select(select) => InstanceFieldValueView::Select(
+                select
+                    .iter()
+                    .filter_map(|option_id| {
+                        let field_def = definition.fields.get(field_id)?;
+                        if let FieldType::Select { options, .. } = &field_def.field_type {
+                            options.iter().find(|o| &o.option_id == option_id).map(|o| {
+                                InstanceSelectOptionView {
+                                    id: o.option_id,
+                                    display_value: o.display_value.clone(),
+                                    color: o.color.clone(),
+                                }
+                            })
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>(),
+            ),
+            FieldValue::References(refs) => {
+                let mut views = Vec::new();
+                for reference in refs {
+                    if let Some(view) = InstanceReferenceView::new(
+                        reference,
+                        &self.context,
+                        self.instance_repository.as_ref(),
+                        self.key_type,
+                    )
+                    .await
+                    {
+                        views.push(view);
+                    }
+                }
+                InstanceFieldValueView::References(views)
+            }
+        }
     }
 }

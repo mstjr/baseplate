@@ -246,31 +246,11 @@ fn update_field_type_config(
             new_max_items,
             remove_options,
         ),
-        (
-            FieldType::References {
-                allowed_definitions,
-                reference_name,
-                reference_api_name,
-                max_items,
-            },
-            FieldTypeModel::References {
-                allowed_definitions: new_allowed,
-                max_items: new_max_items,
-                reference_name: new_ref_name,
-                reference_api_name: new_ref_api_name,
-            },
-        ) => update_reference_config(
-            fields,
-            allowed_definitions,
-            reference_name,
-            reference_api_name,
-            max_items,
-            new_allowed,
-            new_max_items,
-            new_ref_name,
-            new_ref_api_name,
-            ctx,
-        ),
+        (old @ FieldType::References { .. }, new @ FieldTypeModel::References { .. }) => {
+            let mut mutator = DefinitionReferenceMutator::new(fields, old, ctx)?;
+            mutator.update_reference_config(new)?;
+            Ok(())
+        }
         (_, _) => Ok(()),
     }
 }
@@ -317,60 +297,6 @@ fn update_select_config(
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)] //TODO: Refactor to reduce arguments, possibly by grouping related parameters into structs.
-fn update_reference_config(
-    fields: &HashMap<Uuid, DefinitionField>,
-    allowed_definitions: &mut Option<Vec<DefinitionDisplay>>,
-    reference_name: &mut String,
-    reference_api_name: &mut String,
-    max_items: &mut Option<usize>,
-    new_allowed: Patch<Vec<DefinitionDisplayModel>>,
-    new_max_items: Patch<usize>,
-    new_ref_name: Option<String>,
-    new_ref_api_name: Option<String>,
-    ctx: &DefinitionContext,
-) -> Result<(), String> {
-    match new_allowed {
-        Patch::Value(new_defs) => {
-            let new_def_ids: Vec<DefinitionDisplay> = new_defs
-                .iter()
-                .filter_map(|def_display| {
-                    def_display
-                        .to_definition_display(ctx)
-                        .map_err(|e| {
-                            tracing::error!("Failed to convert to DefinitionDisplay: {}", e);
-                            e
-                        })
-                        .ok()
-                })
-                .collect();
-
-            *allowed_definitions = Some(new_def_ids);
-        }
-        Patch::Null => *allowed_definitions = None,
-        Patch::None => {}
-    }
-
-    apply_patch(max_items, new_max_items);
-
-    if let Some(name) = new_ref_name {
-        *reference_name = name;
-    }
-
-    if let Some(api_name) = new_ref_api_name {
-        fields.values().try_for_each(|f| {
-            if f.api_name == api_name {
-                Err("Reference API name must be unique across fields of the definition".to_string())
-            } else {
-                Ok(())
-            }
-        })?;
-
-        *reference_api_name = api_name;
-    }
-    Ok(())
-}
-
 fn create_new_field(
     fields: &HashMap<Uuid, DefinitionField>,
     model: FieldDefinitionModel,
@@ -402,4 +328,100 @@ fn create_new_field(
     };
 
     Ok((Uuid::now_v7(), field))
+}
+
+/// Helper struct to manage updates to Reference field configurations, ensuring that all related constraints and uniqueness requirements are maintained during the update process.
+struct DefinitionReferenceMutator<'a> {
+    fields: &'a HashMap<Uuid, DefinitionField>,
+    allowed_definitions: &'a mut Option<Vec<DefinitionDisplay>>,
+    reference_name: &'a mut String,
+    reference_api_name: &'a mut String,
+    max_items: &'a mut Option<usize>,
+    ctx: &'a DefinitionContext,
+}
+
+impl<'a> DefinitionReferenceMutator<'a> {
+    pub fn new(
+        fields: &'a HashMap<Uuid, DefinitionField>,
+        field: &'a mut FieldType,
+        ctx: &'a DefinitionContext,
+    ) -> Result<Self, String> {
+        if let FieldType::References {
+            allowed_definitions,
+            reference_name,
+            reference_api_name,
+            max_items,
+        } = field
+        {
+            Ok(Self {
+                fields,
+                allowed_definitions,
+                reference_name,
+                reference_api_name,
+                max_items,
+                ctx,
+            })
+        } else {
+            Err(
+                "DefinitionReferenceMutator can only be created for Reference field types"
+                    .to_string(),
+            )
+        }
+    }
+
+    pub fn update_reference_config(&mut self, field: FieldTypeModel) -> Result<(), String> {
+        let FieldTypeModel::References {
+            allowed_definitions: new_allowed,
+            max_items: new_max_items,
+            reference_name: new_ref_name,
+            reference_api_name: new_ref_api_name,
+        } = field
+        else {
+            return Err("Provided field type model must be of References type".to_string());
+        };
+
+        match new_allowed {
+            Patch::Value(new_defs) => {
+                let new_def_ids: Vec<DefinitionDisplay> = new_defs
+                    .iter()
+                    .filter_map(|def_display| {
+                        def_display
+                            .to_definition_display(self.ctx)
+                            .map_err(|e| {
+                                tracing::error!("Failed to convert to DefinitionDisplay: {}", e);
+                                e
+                            })
+                            .ok()
+                    })
+                    .collect();
+
+                *self.allowed_definitions = Some(new_def_ids);
+            }
+            Patch::Null => *self.allowed_definitions = None,
+            Patch::None => {}
+        }
+
+        apply_patch(self.max_items, new_max_items);
+
+        if let Some(name) = new_ref_name {
+            *self.reference_name = name;
+        }
+
+        if let Some(api_name) = new_ref_api_name {
+            self.fields.values().try_for_each(|f| {
+                if f.api_name == api_name {
+                    Err(
+                        "Reference API name must be unique across fields of the definition"
+                            .to_string(),
+                    )
+                } else {
+                    Ok(())
+                }
+            })?;
+
+            *self.reference_api_name = api_name;
+        }
+
+        Ok(())
+    }
 }

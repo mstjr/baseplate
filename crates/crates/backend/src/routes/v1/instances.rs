@@ -8,7 +8,11 @@ use common_core::{
     instances::Instance,
     keys::{Key, KeyType},
 };
-use common_dto::{events::FieldEdit, models::InstanceModel, views::InstanceView};
+use common_dto::{
+    events::FieldEdit,
+    models::InstanceModel,
+    views::{InstanceView, InstanceViewAssembler},
+};
 use uuid::Uuid;
 
 use crate::AppState;
@@ -59,49 +63,44 @@ async fn list_instances(
         .unwrap_or(KeyType::Id);
 
     let mut views = Vec::new();
+    let assembler = InstanceViewAssembler::new(state.instance_repository.clone(), context.clone())
+        .with_key_type(key_type);
+
     for (instance_id, instance) in paginated_instances {
-        if let Some(def) = context.get_definition_by_key(&definition) {
-            views.push(
-                InstanceView::from_instance(
-                    &instance_id,
-                    &instance,
-                    &def.1,
-                    &context,
-                    key_type,
-                    state.instance_repository.clone(),
-                )
-                .await,
-            );
+        let view = assembler.assemble(&instance_id, &instance).await;
+        if let Some(view) = view {
+            views.push(view);
         }
     }
     Ok(axum::Json(views))
 }
 async fn get_instance(
     State(state): State<AppState>,
-    axum::extract::Path((definition, instance_id)): axum::extract::Path<(Key, Uuid)>,
+    axum::extract::Path((_, instance_id)): axum::extract::Path<(Key, Uuid)>,
+    Query(query): Query<HashMap<String, String>>,
 ) -> Result<Json<InstanceView>, String> {
     let context = state.definition_repository.get_definition_context().await;
-    let (_, definition) = context
-        .get_definition_by_key(&definition)
-        .ok_or_else(|| format!("Definition not found for key: {:?}", definition))?;
 
     let instance = state.instance_repository.get_instance(&instance_id).await;
 
-    if let Some((instance_id, instance)) = instance {
-        let key_type = KeyType::Id;
-        let view = InstanceView::from_instance(
-            &instance_id,
-            &instance,
-            &definition,
-            &context,
-            key_type,
-            state.instance_repository.clone(),
-        )
-        .await;
-        Ok(Json(view))
-    } else {
-        Err("Instance not found".into())
-    }
+    let Some((instance_id, instance)) = instance else {
+        return Err("Instance not found".into());
+    };
+
+    let key_type = query
+        .get("key_type")
+        .and_then(|kt| KeyType::from_str(kt).ok())
+        .unwrap_or(KeyType::Id);
+
+    let assembler = InstanceViewAssembler::new(state.instance_repository.clone(), context)
+        .with_key_type(key_type);
+    let view = assembler.assemble(&instance_id, &instance).await;
+    let view = match view {
+        Some(v) => v,
+        None => return Err("Failed to assemble instance view".into()),
+    };
+
+    Ok(Json(view))
 }
 
 #[axum::debug_handler]
@@ -139,15 +138,13 @@ async fn create_instance(
         .and_then(|kt| KeyType::from_str(kt).ok())
         .unwrap_or(KeyType::Id);
 
-    let view = InstanceView::from_instance(
-        &instance_id,
-        &instance,
-        &definition,
-        &context,
-        key_type,
-        state.instance_repository.clone(),
-    )
-    .await;
+    let assembler = InstanceViewAssembler::new(state.instance_repository.clone(), context)
+        .with_key_type(key_type);
+    let view = assembler.assemble(&instance_id, &instance).await;
+    let view = match view {
+        Some(v) => v,
+        None => return Err("Failed to assemble instance view".into()),
+    };
 
     state
         .worker_producer
@@ -226,15 +223,14 @@ async fn update_instance(
         .and_then(|kt| KeyType::from_str(kt).ok())
         .unwrap_or(KeyType::Id);
 
-    let view = InstanceView::from_instance(
-        &instance_id,
-        &new_instance,
-        &definition,
-        &context,
-        key_type,
-        _state.instance_repository.clone(),
-    )
-    .await;
+    let assembler = InstanceViewAssembler::new(_state.instance_repository.clone(), context)
+        .with_key_type(key_type);
+    let view = assembler.assemble(&instance_id, &new_instance).await;
+
+    let view = match view {
+        Some(v) => v,
+        None => return Err("Failed to assemble instance view".into()),
+    };
 
     _state
         .worker_producer
@@ -309,15 +305,14 @@ async fn update_partial_instance(
         .and_then(|kt| KeyType::from_str(kt).ok())
         .unwrap_or(KeyType::Id);
 
-    let view = InstanceView::from_instance(
-        &instance_id,
-        &updated_instance,
-        &definition,
-        &context,
-        key_type,
-        _state.instance_repository.clone(),
-    )
-    .await;
+    let assembler = InstanceViewAssembler::new(_state.instance_repository.clone(), context)
+        .with_key_type(key_type);
+    let view = assembler.assemble(&instance_id, &updated_instance).await;
+
+    let view = match view {
+        Some(v) => v,
+        None => return Err("Failed to assemble instance view".into()),
+    };
 
     _state
         .worker_producer
