@@ -235,6 +235,31 @@ impl DefinitionDisplayView {
     }
 }
 
+pub struct DefinitionViewAssembler {
+    context: DefinitionContext,
+    key_type: KeyType,
+}
+
+impl DefinitionViewAssembler {
+    pub fn new(context: DefinitionContext) -> Self {
+        Self {
+            context,
+            key_type: KeyType::ApiName,
+        }
+    }
+
+    pub fn with_key_type(mut self, key_type: KeyType) -> Self {
+        self.key_type = key_type;
+        self
+    }
+
+    pub fn assemble(&self, def_id: &Uuid, key_type: KeyType) -> Option<DefinitionView> {
+        self.context
+            .get_definition_by_id(def_id)
+            .map(|def| DefinitionView::from_definition(&def, def_id, &self.context, key_type))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

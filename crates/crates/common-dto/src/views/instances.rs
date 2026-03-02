@@ -171,3 +171,42 @@ impl InstanceReferenceView {
         })
     }
 }
+
+pub struct InstanceViewAssembler {
+    instance_repository: Arc<dyn InstanceRepository + Send + Sync>,
+    context: DefinitionContext,
+    key_type: KeyType,
+}
+
+impl InstanceViewAssembler {
+    pub fn new(
+        instance_repository: Arc<dyn InstanceRepository + Send + Sync>,
+        context: DefinitionContext,
+    ) -> Self {
+        Self {
+            instance_repository,
+            context,
+            key_type: KeyType::ApiName,
+        }
+    }
+
+    pub fn with_key_type(mut self, key_type: KeyType) -> Self {
+        self.key_type = key_type;
+        self
+    }
+
+    pub async fn assemble(&self, instance_id: &Uuid, instance: &Instance) -> Option<InstanceView> {
+        let definition = self.context.get_definition_by_id(&instance.definition_id)?;
+        Some(
+            InstanceView::from_instance(
+                &instance_id,
+                &instance,
+                &definition,
+                &self.context,
+                self.key_type,
+                self.instance_repository.clone(),
+            )
+            .await,
+        )
+    }
+}
