@@ -69,7 +69,7 @@ We've chosen a modern, high-performance stack to ensure the CRM can scale with y
 
 Currently, the project is in **WIP**. Our development is guided by these core capabilities:
 
-* [ ] **Data Modeling:** Create/Read/Update/Delete (CRUD) for custom definitions and fields.
+* [x] **Data Modeling:** Create/Read/Update/Delete (CRUD) for custom definitions and fields.
 * [x] **Automation Engine:** Trigger-based actions and custom code execution.
 * [ ] **Collaboration:** Robust user permission system and organization switching.
 * [ ] **Insights:** Custom dashboards and reporting engines.
