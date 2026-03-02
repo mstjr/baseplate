@@ -207,7 +207,7 @@ async fn update_instance(
             new_instance.fields.get(id).map(|new_value| FieldEdit {
                 old_value: old_value.clone(),
                 new_value: new_value.clone(),
-                field_id: id.clone(),
+                field_id: *id,
             })
         })
         .collect();
@@ -285,7 +285,7 @@ async fn update_partial_instance(
             updated_fields.get(id).map(|new_value| FieldEdit {
                 old_value: old_value.clone(),
                 new_value: new_value.clone(),
-                field_id: id.clone(),
+                field_id: *id,
             })
         })
         .collect();
