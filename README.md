@@ -74,6 +74,7 @@ Currently, the project is in **WIP**. Our development is guided by these core ca
 * [ ] **Collaboration:** Robust user permission system and organization switching.
 * [ ] **Insights:** Custom dashboards and reporting engines.
 * [ ] **Integrations:** API-first approach for syncing with Email, Calendars, and Marketing tools.
+* [ ] **Categories and Subforms:** Support for category where we can put fields or subforms.
 
 ---
 
