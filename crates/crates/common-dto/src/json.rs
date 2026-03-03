@@ -43,6 +43,17 @@ impl<T> Patch<T> {
             _ => default,
         }
     }
+
+    pub fn apply(&self, target: &mut Option<T>)
+    where
+        T: Clone,
+    {
+        match self {
+            Patch::Value(v) => *target = Some(v.clone()),
+            Patch::Null => *target = None,
+            _ => {}
+        }
+    }
 }
 
 impl<T> From<Option<T>> for Patch<T> {

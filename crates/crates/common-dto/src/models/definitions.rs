@@ -105,7 +105,7 @@ impl DefinitionModel {
             existing.plural_name = p;
         }
 
-        apply_patch(&mut existing.description, self.description);
+        self.description.apply(&mut existing.description);
 
         if let Some(key) = self.title_field {
             existing.title_field = resolve_key(&existing.fields, &key)
@@ -131,7 +131,17 @@ impl DefinitionModel {
     }
 }
 
-// --- Internal Helper Functions ---
+fn validate_existing_api_name(
+    api_name: &str,
+    fields: &HashMap<Uuid, DefinitionField>,
+) -> Result<(), String> {
+    if fields.values().any(|f| f.api_name == api_name) {
+        Err("Field API name must be unique across fields of the definition".to_string())
+    } else {
+        Ok(())
+    }
+}
+
 fn process_fields(
     fields: &mut HashMap<Uuid, DefinitionField>,
     new_fields: Vec<FieldDefinitionModel>,
@@ -139,6 +149,10 @@ fn process_fields(
     ctx: &DefinitionContext,
 ) -> Result<(), String> {
     for field in new_fields {
+        if let Some(api) = &field.api_name {
+            validate_existing_api_name(api, fields)?;
+        }
+
         if let Some(id) = field.id {
             let mut existing_field_ref = fields
                 .get(&id)
@@ -149,7 +163,7 @@ fn process_fields(
             let existing_field = fields.get_mut(&id).unwrap();
             *existing_field = existing_field_ref;
         } else {
-            let (id, new_f) = create_new_field(fields, field, ctx)?;
+            let (id, new_f) = create_new_field(field, ctx)?;
             fields.insert(id, new_f);
         }
     }
@@ -173,14 +187,6 @@ fn resolve_key(fields: &HashMap<Uuid, DefinitionField>, key: &Key) -> Result<Uui
     }
 }
 
-fn apply_patch<T: Clone>(target: &mut Option<T>, patch: Patch<T>) {
-    match patch {
-        Patch::Value(v) => *target = Some(v),
-        Patch::Null => *target = None,
-        Patch::None => {}
-    }
-}
-
 fn update_existing_field(
     fields: &HashMap<Uuid, DefinitionField>,
     existing: &mut DefinitionField,
@@ -188,15 +194,9 @@ fn update_existing_field(
     ctx: &DefinitionContext,
 ) -> Result<(), String> {
     if let Some(api) = model.api_name {
-        fields.values().try_for_each(|f| {
-            if f.api_name == api && f.api_name != existing.api_name {
-                Err("Field API name must be unique across fields of the definition".to_string())
-            } else {
-                Ok(())
-            }
-        })?;
         existing.api_name = api;
     }
+
     if let Some(name) = model.name {
         existing.name = name;
     }
@@ -210,7 +210,7 @@ fn update_existing_field(
         existing.order = ord;
     }
 
-    apply_patch(&mut existing.description, model.description);
+    model.description.apply(&mut existing.description);
 
     if let Some(type_model) = model.field_type {
         let new_type = type_model.to_field_type(ctx)?;
@@ -262,7 +262,7 @@ fn update_select_config(
     new_max_items: Patch<usize>,
     remove_options: Option<Vec<Key>>,
 ) -> Result<(), String> {
-    apply_patch(max_items, new_max_items);
+    new_max_items.apply(max_items);
 
     if let Some(removals) = remove_options {
         for key in removals {
@@ -298,7 +298,6 @@ fn update_select_config(
 }
 
 fn create_new_field(
-    fields: &HashMap<Uuid, DefinitionField>,
     model: FieldDefinitionModel,
     ctx: &DefinitionContext,
 ) -> Result<(Uuid, DefinitionField), String> {
@@ -309,10 +308,6 @@ fn create_new_field(
     let api_name = model
         .api_name
         .ok_or("API name must be provided for new fields")?;
-
-    if fields.values().any(|f| f.api_name == api_name) {
-        return Err("Field API name must be unique across fields of the definition".to_string());
-    }
 
     let name = model.name.ok_or("Name must be provided for new fields")?;
 
@@ -401,7 +396,7 @@ impl<'a> DefinitionReferenceMutator<'a> {
             Patch::None => {}
         }
 
-        apply_patch(self.max_items, new_max_items);
+        new_max_items.apply(self.max_items);
 
         if let Some(name) = new_ref_name {
             *self.reference_name = name;
